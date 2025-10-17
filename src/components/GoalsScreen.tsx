@@ -1,9 +1,9 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion } from 'motion/react';
-import { 
-  ArrowLeft, 
-  Target, 
-  Plus, 
+import {
+  ArrowLeft,
+  Target,
+  Plus,
   Home,
   Calendar,
   Clock,
@@ -31,6 +31,13 @@ import { Progress } from './ui/progress';
 import { AddGoalModal } from './AddGoalModal';
 import { GoalCard } from './GoalCard';
 import { PeerGroupSection } from './PeerGroupSection';
+import { TimelineFilter } from './goals/TimelineFilter';
+import { ClarificationStep } from './goals/ClarificationStep';
+import { ActionPlanView } from './goals/ActionPlanView';
+import { LifeCoachingSession } from './goals/LifeCoachingSession';
+import { NudgeCard } from './NudgeCard';
+import { goalsApi } from '../lib/api';
+import { useMasterAgent } from '../hooks/useMasterAgent';
 
 interface GoalsScreenProps {
   onBack: () => void;
@@ -44,14 +51,16 @@ export interface Goal {
   title: string;
   description: string;
   category: string;
-  timeframe: 'short' | 'long';
+  timeframe: '3-months' | '6-months' | '12-months';
   progress: number;
-  weeklyActions: Array<{
+  status: string;
+  weeklyActions?: Array<{
     id: string;
     text: string;
     completed: boolean;
   }>;
   aiInsight?: string;
+  actionPlan?: any;
 }
 
 // Goal categories with icons and colors
@@ -68,30 +77,144 @@ export const goalCategories = [
 
 export function GoalsScreen({ onBack, onShowChat, onShowJournal, onShowTools }: GoalsScreenProps) {
   const [showAddGoal, setShowAddGoal] = useState(false);
-  const [showAddGoalForm, setShowAddGoalForm] = useState(true); // Always show form at top
+  const [showAddGoalForm, setShowAddGoalForm] = useState(true);
   const [currentStep, setCurrentStep] = useState(1);
-  const [selectedTimeframe, setSelectedTimeframe] = useState<'short' | 'long' | null>(null);
+  const [selectedTimeframe, setSelectedTimeframe] = useState<'3-months' | '6-months' | '12-months' | null>(null);
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [goalTitle, setGoalTitle] = useState('');
   const [goalDescription, setGoalDescription] = useState('');
   const [goals, setGoals] = useState<Goal[]>([]);
 
-  const handleAddGoal = (goalData: any) => {
-    const newGoal: Goal = {
-      id: Date.now().toString(),
-      title: goalData.title,
-      description: goalData.description || '',
-      category: goalData.category,
-      timeframe: goalData.timeframe,
-      progress: 0,
-      weeklyActions: [
-        { id: '1', text: 'Complete initial planning', completed: false },
-        { id: '2', text: 'Set up daily routine', completed: false },
-        { id: '3', text: 'Track first milestone', completed: false }
-      ]
-    };
-    setGoals([...goals, newGoal]);
-    setShowAddGoal(false);
+  // New state for enhanced features
+  const [selectedTimeline, setSelectedTimeline] = useState<'all' | '3-months' | '6-months' | '12-months'>('all');
+  const [clarificationQuestions, setClarificationQuestions] = useState<any[]>([]);
+  const [currentGoalId, setCurrentGoalId] = useState<string | null>(null);
+  const [actionPlanData, setActionPlanData] = useState<any>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [showCoachingSession, setShowCoachingSession] = useState(false);
+
+  // Phase 3: Master Agent hook
+  const { logEvent, fetchNudges, acceptNudge, dismissNudge } = useMasterAgent();
+  const [goalsNudges, setGoalsNudges] = useState<any[]>([]);
+
+  // Load goals on mount
+  useEffect(() => {
+    loadGoals();
+    loadNudges();
+  }, []);
+
+  const loadNudges = async () => {
+    const nudges = await fetchNudges('goals');
+    setGoalsNudges(nudges);
+  };
+
+  const loadGoals = async () => {
+    try {
+      const fetchedGoals = await goalsApi.getGoals();
+      setGoals(fetchedGoals);
+    } catch (error) {
+      console.error('Failed to load goals:', error);
+    }
+  };
+
+  const handleCreateGoal = async () => {
+    if (!goalTitle.trim() || !selectedCategory || !selectedTimeframe) return;
+
+    setIsLoading(true);
+    try {
+      const result = await goalsApi.createGoal({
+        title: goalTitle.trim(),
+        description: goalDescription.trim(),
+        category: selectedCategory,
+        timeframe: selectedTimeframe,
+      });
+
+      setCurrentGoalId(result.goal.id);
+
+      // Phase 3: Log goal creation event
+      logEvent({
+        event_type: 'goal_created',
+        feature_area: 'goals',
+        event_data: {
+          goal_id: result.goal.id,
+          category: selectedCategory,
+          timeframe: selectedTimeframe,
+          has_clarifications: result.clarifications && result.clarifications.length > 0,
+        },
+      });
+
+      // Check if we got clarification questions
+      // Note: clarifications is now an array after backend fix
+      if (result.clarifications && result.clarifications.length > 0) {
+        setClarificationQuestions(result.clarifications);
+        setCurrentStep(4); // Move to clarification step
+      } else {
+        // Skip clarifications if enough context
+        await loadGoals();
+        resetForm();
+      }
+    } catch (error) {
+      console.error('Failed to create goal:', error);
+      alert('Failed to create goal. Please try again.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleSubmitClarifications = async (answers: Array<{ questionId: number; answer: string }>) => {
+    if (!currentGoalId) return;
+
+    setIsLoading(true);
+    try {
+      const result = await goalsApi.submitClarifications(currentGoalId, answers);
+      setActionPlanData(result.planData);
+      setCurrentStep(5); // Move to action plan view
+    } catch (error) {
+      console.error('Failed to submit clarifications:', error);
+      alert('Failed to generate action plan. Please try again.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleSkipClarifications = async () => {
+    if (!currentGoalId) return;
+
+    setIsLoading(true);
+    try {
+      const result = await goalsApi.submitClarifications(currentGoalId, []);
+      setActionPlanData(result.planData);
+      setCurrentStep(5);
+    } catch (error) {
+      console.error('Failed to generate action plan:', error);
+      alert('Failed to generate action plan. Please try again.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleCompletePlan = async () => {
+    // Transition to life coaching session instead of just closing
+    setShowCoachingSession(true);
+    setCurrentStep(6); // New step for coaching session
+  };
+
+  const resetForm = () => {
+    setCurrentStep(1);
+    setSelectedTimeframe(null);
+    setSelectedCategory(null);
+    setGoalTitle('');
+    setGoalDescription('');
+    setClarificationQuestions([]);
+    setCurrentGoalId(null);
+    setActionPlanData(null);
+    setShowCoachingSession(false);
+    setShowAddGoalForm(false);
+  };
+
+  const handleBackFromCoaching = async () => {
+    await loadGoals();
+    resetForm();
   };
 
   const getInsightForCategory = (category: string) => {
@@ -111,16 +234,32 @@ export function GoalsScreen({ onBack, onShowChat, onShowJournal, onShowTools }: 
   const toggleActionComplete = (goalId: string, actionId: string) => {
     setGoals(goals.map(goal => {
       if (goal.id === goalId) {
-        const updatedActions = goal.weeklyActions.map(action => 
-          action.id === actionId 
+        const updatedActions = goal.weeklyActions?.map(action =>
+          action.id === actionId
             ? { ...action, completed: !action.completed }
             : action
-        );
-        
+        ) || [];
+
         // Update progress based on completed actions
         const completedCount = updatedActions.filter(a => a.completed).length;
-        const progress = Math.round((completedCount / updatedActions.length) * 100);
-        
+        const progress = updatedActions.length > 0
+          ? Math.round((completedCount / updatedActions.length) * 100)
+          : 0;
+
+        // Phase 3: Log action completion event
+        const action = updatedActions.find(a => a.id === actionId);
+        if (action?.completed) {
+          logEvent({
+            event_type: 'action_completed',
+            feature_area: 'goals',
+            event_data: {
+              goal_id: goalId,
+              action_id: actionId,
+              new_progress: progress,
+            },
+          });
+        }
+
         return {
           ...goal,
           weeklyActions: updatedActions,
@@ -146,13 +285,10 @@ export function GoalsScreen({ onBack, onShowChat, onShowJournal, onShowTools }: 
         >
           <ArrowLeft className="w-5 h-5 text-gray-600" />
         </button>
-        
-        <div className="flex items-center gap-2">
-          <span>🎯</span>
-          <h1 className="text-lg text-gray-900">Goals</h1>
-        </div>
-        
-        <motion.button 
+
+        <div></div>
+
+        <motion.button
           onClick={onBack}
           className="w-10 h-10 bg-gradient-to-br from-purple-500 to-pink-500 rounded-full flex items-center justify-center shadow-lg hover:shadow-xl transition-all duration-200"
           whileHover={{ scale: 1.05 }}
@@ -178,20 +314,20 @@ export function GoalsScreen({ onBack, onShowChat, onShowJournal, onShowTools }: 
               
               {/* Step Indicator */}
               <div className="px-6 py-4 border-b border-gray-100">
-                <div className="flex items-center justify-center gap-4">
-                  {[1, 2, 3].map((step) => (
+                <div className="flex items-center justify-center gap-1">
+                  {[1, 2, 3, 4, 5, 6].map((step) => (
                     <div key={step} className="flex items-center">
-                      <div className={`w-8 h-8 rounded-full flex items-center justify-center transition-all duration-200 ${
-                        step === currentStep 
-                          ? 'bg-gradient-to-br from-purple-500 to-pink-500 text-white' 
+                      <div className={`w-7 h-7 rounded-full flex items-center justify-center transition-all duration-200 ${
+                        step === currentStep
+                          ? 'bg-gradient-to-br from-purple-500 to-pink-500 text-white'
                           : step < currentStep
                           ? 'bg-purple-100 text-purple-600'
                           : 'bg-gray-100 text-gray-400'
                       }`}>
-                        <span className="text-sm">{step}</span>
+                        <span className="text-xs">{step}</span>
                       </div>
-                      {step < 3 && (
-                        <div className={`w-12 h-0.5 mx-2 ${
+                      {step < 6 && (
+                        <div className={`w-6 h-0.5 mx-0.5 ${
                           step < currentStep ? 'bg-purple-200' : 'bg-gray-200'
                         }`} />
                       )}
@@ -211,11 +347,11 @@ export function GoalsScreen({ onBack, onShowChat, onShowJournal, onShowTools }: 
                     </div>
 
                     <div className="space-y-3">
-                      {/* Short-term option */}
+                      {/* 3 months option */}
                       <button
-                        onClick={() => setSelectedTimeframe('short')}
+                        onClick={() => setSelectedTimeframe('3-months')}
                         className={`w-full p-4 rounded-xl border-2 transition-all duration-200 text-left ${
-                          selectedTimeframe === 'short'
+                          selectedTimeframe === '3-months'
                             ? 'border-purple-500 bg-purple-50'
                             : 'border-gray-200 bg-white hover:border-gray-300'
                         }`}
@@ -223,17 +359,17 @@ export function GoalsScreen({ onBack, onShowChat, onShowJournal, onShowTools }: 
                         <div className="flex items-center gap-3">
                           <Calendar className="w-5 h-5 text-purple-500" />
                           <div>
-                            <h4 className="text-gray-900 mb-1">Short-term</h4>
-                            <p className="text-gray-600 text-sm">≤ 3 months</p>
+                            <h4 className="text-gray-900 mb-1">3 Months</h4>
+                            <p className="text-gray-600 text-sm">Quick wins & habits</p>
                           </div>
                         </div>
                       </button>
 
-                      {/* Long-term option */}
+                      {/* 6 months option */}
                       <button
-                        onClick={() => setSelectedTimeframe('long')}
+                        onClick={() => setSelectedTimeframe('6-months')}
                         className={`w-full p-4 rounded-xl border-2 transition-all duration-200 text-left ${
-                          selectedTimeframe === 'long'
+                          selectedTimeframe === '6-months'
                             ? 'border-purple-500 bg-purple-50'
                             : 'border-gray-200 bg-white hover:border-gray-300'
                         }`}
@@ -241,8 +377,26 @@ export function GoalsScreen({ onBack, onShowChat, onShowJournal, onShowTools }: 
                         <div className="flex items-center gap-3">
                           <Clock className="w-5 h-5 text-purple-500" />
                           <div>
-                            <h4 className="text-gray-900 mb-1">Long-term</h4>
-                            <p className="text-gray-600 text-sm">6-12 months</p>
+                            <h4 className="text-gray-900 mb-1">6 Months</h4>
+                            <p className="text-gray-600 text-sm">Skill building</p>
+                          </div>
+                        </div>
+                      </button>
+
+                      {/* 12 months option */}
+                      <button
+                        onClick={() => setSelectedTimeframe('12-months')}
+                        className={`w-full p-4 rounded-xl border-2 transition-all duration-200 text-left ${
+                          selectedTimeframe === '12-months'
+                            ? 'border-purple-500 bg-purple-50'
+                            : 'border-gray-200 bg-white hover:border-gray-300'
+                        }`}
+                      >
+                        <div className="flex items-center gap-3">
+                          <Star className="w-5 h-5 text-purple-500" />
+                          <div>
+                            <h4 className="text-gray-900 mb-1">12 Months</h4>
+                            <p className="text-gray-600 text-sm">Transformation</p>
                           </div>
                         </div>
                       </button>
@@ -296,7 +450,11 @@ export function GoalsScreen({ onBack, onShowChat, onShowJournal, onShowTools }: 
                     {selectedCategory && selectedTimeframe && (
                       <div className="mb-4">
                         <Badge className="bg-purple-100 text-purple-700 hover:bg-purple-100">
-                          {goalCategories.find(c => c.id === selectedCategory)?.name} • {selectedTimeframe === 'short' ? 'Short-term' : 'Long-term'}
+                          {goalCategories.find(c => c.id === selectedCategory)?.name} • {
+                            selectedTimeframe === '3-months' ? '3 Months' :
+                            selectedTimeframe === '6-months' ? '6 Months' :
+                            '12 Months'
+                          }
                         </Badge>
                       </div>
                     )}
@@ -328,73 +486,89 @@ export function GoalsScreen({ onBack, onShowChat, onShowJournal, onShowTools }: 
                     </div>
                   </div>
                 )}
-              </div>
 
-              {/* Form Footer */}
-              <div className="px-6 py-4 bg-gray-50 flex items-center justify-between">
-                {currentStep === 1 ? (
-                  <div className="flex justify-end w-full">
-                    <Button
-                      onClick={() => setCurrentStep(2)}
-                      disabled={!selectedTimeframe}
-                      className="bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white border-0 disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      Next
-                    </Button>
-                  </div>
-                ) : currentStep === 2 ? (
-                  <>
-                    <Button
-                      variant="outline"
-                      onClick={() => setCurrentStep(1)}
-                      className="text-gray-600 border-gray-300 hover:bg-gray-100"
-                    >
-                      Back
-                    </Button>
-                    <Button
-                      onClick={() => setCurrentStep(3)}
-                      disabled={!selectedCategory}
-                      className="bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white border-0 disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      Next
-                    </Button>
-                  </>
-                ) : (
-                  <>
-                    <Button
-                      variant="outline"
-                      onClick={() => setCurrentStep(2)}
-                      className="text-gray-600 border-gray-300 hover:bg-gray-100"
-                    >
-                      Back
-                    </Button>
-                    <Button
-                      onClick={() => {
-                        if (goalTitle.trim() && selectedCategory && selectedTimeframe) {
-                          const newGoal = {
-                            title: goalTitle.trim(),
-                            description: goalDescription.trim(),
-                            category: selectedCategory,
-                            timeframe: selectedTimeframe
-                          };
-                          handleAddGoal(newGoal);
-                          // Reset form
-                          setCurrentStep(1);
-                          setSelectedTimeframe(null);
-                          setSelectedCategory(null);
-                          setGoalTitle('');
-                          setGoalDescription('');
-                          setShowAddGoalForm(false);
-                        }
-                      }}
-                      disabled={!goalTitle.trim()}
-                      className="bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white border-0 disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      Create Goal
-                    </Button>
-                  </>
+                {/* Step 4: Clarification Questions */}
+                {currentStep === 4 && clarificationQuestions.length > 0 && (
+                  <ClarificationStep
+                    questions={clarificationQuestions}
+                    onSubmit={handleSubmitClarifications}
+                    onSkip={handleSkipClarifications}
+                    isLoading={isLoading}
+                  />
+                )}
+
+                {/* Step 5: Action Plan View */}
+                {currentStep === 5 && actionPlanData && currentGoalId && (
+                  <ActionPlanView
+                    planData={actionPlanData}
+                    goalId={currentGoalId}
+                    onComplete={handleCompletePlan}
+                    onPlanAdjusted={(newPlanData) => setActionPlanData(newPlanData)}
+                  />
+                )}
+
+                {/* Step 6: Life Coaching Session */}
+                {currentStep === 6 && actionPlanData && showCoachingSession && (
+                  <LifeCoachingSession
+                    goalTitle={goalTitle}
+                    sprints={actionPlanData.sprints}
+                    currentSprintIndex={0}
+                    onBack={handleBackFromCoaching}
+                  />
                 )}
               </div>
+
+              {/* Form Footer - Only show for steps 1-3 */}
+              {currentStep <= 3 && (
+                <div className="px-6 py-4 bg-gray-50 flex items-center justify-between">
+                  {currentStep === 1 ? (
+                    <div className="flex justify-end w-full">
+                      <Button
+                        onClick={() => setCurrentStep(2)}
+                        disabled={!selectedTimeframe}
+                        className="bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white border-0 disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        Next
+                      </Button>
+                    </div>
+                  ) : currentStep === 2 ? (
+                    <>
+                      <Button
+                        variant="outline"
+                        onClick={() => setCurrentStep(1)}
+                        className="text-gray-600 border-gray-300 hover:bg-gray-100"
+                      >
+                        Back
+                      </Button>
+                      <Button
+                        onClick={() => setCurrentStep(3)}
+                        disabled={!selectedCategory}
+                        className="bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white border-0 disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        Next
+                      </Button>
+                    </>
+                  ) : (
+                    <>
+                      <Button
+                        variant="outline"
+                        onClick={() => setCurrentStep(2)}
+                        className="text-gray-600 border-gray-300 hover:bg-gray-100"
+                        disabled={isLoading}
+                      >
+                        Back
+                      </Button>
+                      <Button
+                        onClick={handleCreateGoal}
+                        disabled={!goalTitle.trim() || isLoading}
+                        className="bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white border-0 disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        {isLoading ? 'Creating...' : 'Create Goal'}
+                      </Button>
+                    </>
+                  )}
+                </div>
+              )}
             </Card>
           </motion.div>
         )}
@@ -427,6 +601,52 @@ export function GoalsScreen({ onBack, onShowChat, onShowJournal, onShowTools }: 
           </motion.div>
         )}
 
+        {/* Nudges Section */}
+        {goalsNudges.length > 0 && (
+          <motion.div
+            initial={{ y: 20, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            transition={{ duration: 0.6, delay: 0.12 }}
+            className="space-y-3"
+          >
+            {goalsNudges
+              .filter((nudge) => nudge.status === 'pending')
+              .map((nudge) => (
+                <NudgeCard
+                  key={nudge.id}
+                  nudge={nudge}
+                  onAccept={acceptNudge}
+                  onDismiss={dismissNudge}
+                  onNavigate={(route) => {
+                    if (route.includes('journal')) onShowJournal();
+                    else if (route.includes('chat')) onShowChat();
+                    else if (route.includes('tools')) onShowTools();
+                  }}
+                />
+              ))}
+          </motion.div>
+        )}
+
+        {/* Timeline Filter - Show when there are goals */}
+        {goals.length > 0 && (
+          <motion.div
+            initial={{ y: 20, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            transition={{ duration: 0.6, delay: 0.15 }}
+          >
+            <TimelineFilter
+              selectedTimeline={selectedTimeline}
+              onTimelineChange={setSelectedTimeline}
+              goalCounts={{
+                all: goals.length,
+                '3-months': goals.filter(g => g.timeframe === '3-months').length,
+                '6-months': goals.filter(g => g.timeframe === '6-months').length,
+                '12-months': goals.filter(g => g.timeframe === '12-months').length,
+              }}
+            />
+          </motion.div>
+        )}
+
         {/* Goals List */}
         {goals.length > 0 && (
           <motion.div
@@ -435,15 +655,17 @@ export function GoalsScreen({ onBack, onShowChat, onShowJournal, onShowTools }: 
             animate={{ y: 0, opacity: 1 }}
             transition={{ duration: 0.6, delay: 0.2 }}
           >
-            {goals.map((goal) => (
-              <GoalCard
-                key={goal.id}
-                goal={goal}
-                goalCategories={goalCategories}
-                onToggleAction={toggleActionComplete}
-                getInsightForCategory={getInsightForCategory}
-              />
-            ))}
+            {goals
+              .filter(goal => selectedTimeline === 'all' || goal.timeframe === selectedTimeline)
+              .map((goal) => (
+                <GoalCard
+                  key={goal.id}
+                  goal={goal}
+                  goalCategories={goalCategories}
+                  onToggleAction={toggleActionComplete}
+                  getInsightForCategory={getInsightForCategory}
+                />
+              ))}
           </motion.div>
         )}
 

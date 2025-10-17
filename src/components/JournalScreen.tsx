@@ -1,7 +1,7 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion } from 'motion/react';
-import { 
-  ArrowLeft, 
+import {
+  ArrowLeft,
   BookOpen,
   Sparkles,
   Target,
@@ -10,6 +10,8 @@ import {
 } from 'lucide-react';
 import { JournalSessionScreen } from './JournalSessionScreen';
 import { JournalCard } from './JournalCard';
+import { NudgeCard } from './NudgeCard';
+import { useMasterAgent } from '../hooks/useMasterAgent';
 
 export type JournalMode = 'free-write' | 'past' | 'present' | 'future';
 export type WritingMode = 'text' | 'voice' | 'bullet';
@@ -80,6 +82,19 @@ export function JournalScreen({ onBack, onShowChat, onShowGoals, onShowTools }: 
   const [activeSession, setActiveSession] = useState<JournalSession | null>(null);
   const [lastSession, setLastSession] = useState<JournalSession | null>(null);
   const [streak, setStreak] = useState(0);
+
+  // Phase 3: Master Agent hook
+  const { fetchNudges, acceptNudge, dismissNudge } = useMasterAgent();
+  const [journalNudges, setJournalNudges] = useState<any[]>([]);
+
+  // Load nudges on mount
+  useEffect(() => {
+    const loadNudges = async () => {
+      const nudges = await fetchNudges('journal');
+      setJournalNudges(nudges);
+    };
+    loadNudges();
+  }, [fetchNudges]);
 
   const handleStartSession = (mode: JournalMode) => {
     const track = journalTracks.find(t => t.mode === mode);
@@ -183,6 +198,32 @@ export function JournalScreen({ onBack, onShowChat, onShowGoals, onShowTools }: 
             Make sense of your past, understand your present, and design your future.
           </p>
         </motion.div>
+
+        {/* Nudges Section */}
+        {journalNudges.length > 0 && (
+          <motion.div
+            initial={{ y: 20, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            transition={{ duration: 0.6, delay: 0.15 }}
+            className="space-y-3"
+          >
+            {journalNudges
+              .filter((nudge) => nudge.status === 'pending')
+              .map((nudge) => (
+                <NudgeCard
+                  key={nudge.id}
+                  nudge={nudge}
+                  onAccept={acceptNudge}
+                  onDismiss={dismissNudge}
+                  onNavigate={(route) => {
+                    if (route.includes('goals')) onShowGoals?.();
+                    else if (route.includes('chat')) onShowChat?.();
+                    else if (route.includes('tools')) onShowTools?.();
+                  }}
+                />
+              ))}
+          </motion.div>
+        )}
 
         {/* Journal Cards */}
         <motion.div 

@@ -1,0 +1,544 @@
+{
+  "info": {
+    "name": "Luma API - Phase 3 Master Agent",
+    "description": "Master Agent / Neuronetwork System API Testing",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:4000/api/v1",
+      "type": "string"
+    },
+    {
+      "key": "access_token",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "event_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "nudge_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "feedback_id",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "Setup: Get Auth Token",
+      "item": [
+        {
+          "name": "Register Test User",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"phase3test{{$timestamp}}@example.com\",\n  \"password\": \"TestPassword123!\",\n  \"name\": \"Phase3 Tester\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/auth/register",
+              "host": ["{{base_url}}"],
+              "path": ["auth", "register"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('User registered successfully', function () {",
+                  "    pm.response.to.have.status(201);",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.data.session.access_token).to.exist;",
+                  "    pm.collectionVariables.set('access_token', jsonData.data.session.access_token);",
+                  "    console.log('✅ Auth token saved:', jsonData.data.session.access_token.substring(0, 20) + '...');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "1. Event Logging",
+      "item": [
+        {
+          "name": "1.1 Log Event - Goal Created",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"event_type\": \"goal_created\",\n  \"source_feature\": \"goals\",\n  \"source_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n  \"event_data\": {\n    \"goal_title\": \"Learn Spanish\",\n    \"category\": \"personal-growth\",\n    \"timeframe\": \"6-months\"\n  }\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/master-agent/events",
+              "host": ["{{base_url}}"],
+              "path": ["master-agent", "events"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Event logged successfully', function () {",
+                  "    pm.response.to.have.status(201);",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.success).to.eql(true);",
+                  "    pm.expect(jsonData.data.event_id).to.exist;",
+                  "    pm.collectionVariables.set('event_id', jsonData.data.event_id);",
+                  "    console.log('✅ Event ID:', jsonData.data.event_id);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "1.2 Log Event - Journal Completed",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"event_type\": \"journal_completed\",\n  \"source_feature\": \"journal\",\n  \"source_id\": \"660e8400-e29b-41d4-a716-446655440000\",\n  \"event_data\": {\n    \"session_mode\": \"present-virtues\",\n    \"entry_count\": 1,\n    \"word_count\": 250\n  }\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/master-agent/events",
+              "host": ["{{base_url}}"],
+              "path": ["master-agent", "events"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Journal event logged', function () {",
+                  "    pm.response.to.have.status(201);",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.data.event_id).to.exist;",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "1.3 Log Event - Tool Completed",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"event_type\": \"tool_completed\",\n  \"source_feature\": \"tools\",\n  \"source_id\": \"770e8400-e29b-41d4-a716-446655440000\",\n  \"event_data\": {\n    \"tool_type\": \"brain_exercise\",\n    \"duration_seconds\": 180\n  }\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/master-agent/events",
+              "host": ["{{base_url}}"],
+              "path": ["master-agent", "events"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Tool completion event logged', function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "2. Nudge Delivery",
+      "item": [
+        {
+          "name": "2.1 Get Nudges for Home Surface",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/master-agent/nudges/home",
+              "host": ["{{base_url}}"],
+              "path": ["master-agent", "nudges", "home"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Nudges retrieved for home surface', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.data.nudges).to.be.an('array');",
+                  "    console.log('Nudges count (home):', jsonData.data.nudges.length);",
+                  "    ",
+                  "    // Save first nudge ID if available",
+                  "    if (jsonData.data.nudges.length > 0) {",
+                  "        pm.collectionVariables.set('nudge_id', jsonData.data.nudges[0].nudge_id);",
+                  "        console.log('✅ Nudge ID saved:', jsonData.data.nudges[0].nudge_id);",
+                  "    }",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "2.2 Get Nudges for Goals Surface",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/master-agent/nudges/goals",
+              "host": ["{{base_url}}"],
+              "path": ["master-agent", "nudges", "goals"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Nudges retrieved for goals surface', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.data.nudges).to.be.an('array');",
+                  "    console.log('Nudges count (goals):', jsonData.data.nudges.length);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "2.3 Get Nudges for Journal Surface",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/master-agent/nudges/journal",
+              "host": ["{{base_url}}"],
+              "path": ["master-agent", "nudges", "journal"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Nudges retrieved for journal surface', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "3. Nudge Interactions",
+      "item": [
+        {
+          "name": "3.1 Accept Nudge",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/master-agent/nudges/{{nudge_id}}/accept",
+              "host": ["{{base_url}}"],
+              "path": ["master-agent", "nudges", "{{nudge_id}}", "accept"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "// Note: This will fail if no nudge_id was saved (no nudges generated yet)",
+                  "if (pm.collectionVariables.get('nudge_id')) {",
+                  "    pm.test('Nudge accepted successfully', function () {",
+                  "        pm.response.to.have.status(200);",
+                  "        var jsonData = pm.response.json();",
+                  "        pm.expect(jsonData.success).to.eql(true);",
+                  "    });",
+                  "} else {",
+                  "    console.log('⚠️ Skipping accept test - no nudge_id available (generate nudges first)');",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "3.2 Dismiss Nudge",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/master-agent/nudges/{{nudge_id}}/dismiss",
+              "host": ["{{base_url}}"],
+              "path": ["master-agent", "nudges", "{{nudge_id}}", "dismiss"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.collectionVariables.get('nudge_id')) {",
+                  "    pm.test('Nudge dismissed successfully', function () {",
+                  "        pm.response.to.have.status(200);",
+                  "    });",
+                  "} else {",
+                  "    console.log('⚠️ Skipping dismiss test - no nudge_id available');",
+                  "}"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "4. Feedback Collection",
+      "item": [
+        {
+          "name": "4.1 Record Thumbs Up Feedback",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"feedback_type\": \"thumbs_up\",\n  \"target_type\": \"ai_response\",\n  \"target_id\": \"880e8400-e29b-41d4-a716-446655440000\",\n  \"comment\": \"Very helpful and supportive response!\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/master-agent/feedback",
+              "host": ["{{base_url}}"],
+              "path": ["master-agent", "feedback"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Feedback recorded successfully', function () {",
+                  "    pm.response.to.have.status(201);",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.data.feedback_id).to.exist;",
+                  "    pm.collectionVariables.set('feedback_id', jsonData.data.feedback_id);",
+                  "    console.log('✅ Feedback ID:', jsonData.data.feedback_id);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "4.2 Record Rating Feedback",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"feedback_type\": \"rating\",\n  \"target_type\": \"nudge\",\n  \"target_id\": \"{{nudge_id}}\",\n  \"rating\": 5,\n  \"comment\": \"Perfect timing and very relevant!\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/master-agent/feedback",
+              "host": ["{{base_url}}"],
+              "path": ["master-agent", "feedback"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Rating feedback recorded', function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "4.3 Record Helpful Feedback",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"feedback_type\": \"helpful\",\n  \"target_type\": \"suggestion\",\n  \"target_id\": \"990e8400-e29b-41d4-a716-446655440000\",\n  \"metadata\": {\n    \"dwell_time_seconds\": 45,\n    \"action_taken\": true\n  }\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/master-agent/feedback",
+              "host": ["{{base_url}}"],
+              "path": ["master-agent", "feedback"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Helpful feedback recorded', function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "5. Context & Debugging",
+      "item": [
+        {
+          "name": "5.1 Get Context Summary",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/master-agent/context",
+              "host": ["{{base_url}}"],
+              "path": ["master-agent", "context"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Context summary retrieved', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.data.context).to.exist;",
+                  "    ",
+                  "    var context = jsonData.data.context;",
+                  "    console.log('\\n=== CONTEXT SUMMARY ===');",
+                  "    console.log('Themes:', context.themes);",
+                  "    console.log('Risks:', context.risks);",
+                  "    console.log('Momentum:', context.momentum);",
+                  "    console.log('Mood:', context.mood);",
+                  "    console.log('Active Goal:', context.active_goal);",
+                  "    console.log('=======================\\n');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

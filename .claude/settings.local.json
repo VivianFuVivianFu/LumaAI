@@ -1,0 +1,38 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(mkdir:*)",
+      "Bash(npm install)",
+      "Bash(npm install:*)",
+      "Bash(cat:*)",
+      "Bash(if [ -f .env ])",
+      "Bash(then echo \"✅ .env file exists\")",
+      "Bash(else echo \"❌ .env file NOT found\")",
+      "Bash(fi)",
+      "Bash(npm run dev)",
+      "Bash(timeout:*)",
+      "Bash(find:*)",
+      "Bash(for file in middleware/auth.middleware.ts middleware/validation.middleware.ts modules/auth/auth.controller.ts modules/chat/chat.controller.ts modules/dashboard/dashboard.controller.ts modules/goals/goals.controller.ts modules/journal/journal.controller.ts)",
+      "Bash(do sed -i \"s|''../shared/utils/|''../utils/|g; s|''../../shared/utils/|''../../utils/|g\" \"$file\")",
+      "Bash(done)",
+      "Bash(curl:*)",
+      "Bash(netstat:*)",
+      "Bash(findstr:*)",
+      "Bash(taskkill:*)",
+      "Bash(npm run build)",
+      "Bash(node test-api.js)",
+      "Bash(powershell.exe:*)",
+      "Bash(node:*)",
+      "Bash(copy:*)",
+      "Bash(dir:*)",
+      "Bash(npx tsc:*)",
+      "Bash(git remote add:*)",
+      "Bash(git remote set-url:*)",
+      "Bash(git branch:*)",
+      "Bash(git add:*)",
+      "Bash(git reset:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

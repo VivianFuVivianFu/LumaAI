@@ -17,14 +17,14 @@ export function OnboardingScreen({ currentScreen, onNext, onGetStarted }: Onboar
       title: "Meet Luma",
       description: "Meet Luma, your science-backed guide for healing, growth, and shine.",
       primaryAction: "Continue",
-      secondaryAction: "Learn more",
+      secondaryAction: null,
       onPrimaryClick: onNext
     },
     {
       id: 2,
       icon: Star,
       title: "Personalized Support",
-      description: "Our conversation, journaling, and empowering tools adapt seamlessly to your mood and needs.",
+      description: "Your conversations, journals, and reflections adapt intelligently to your mood and needs.",
       primaryAction: "Show me how",
       secondaryAction: null,
       onPrimaryClick: onNext
@@ -33,9 +33,9 @@ export function OnboardingScreen({ currentScreen, onNext, onGetStarted }: Onboar
       id: 3,
       icon: Shield,
       title: "Your Privacy Matters",
-      description: "Built with care to meet privacy and safety guidelines",
+      description: "Luma is built with care and meets high data safety standards. You're always in control — your data can be deleted anytime.",
       primaryAction: "Get started",
-      secondaryAction: "Privacy details →",
+      secondaryAction: null,
       onPrimaryClick: onGetStarted
     }
   ];
@@ -102,6 +102,21 @@ export function OnboardingScreen({ currentScreen, onNext, onGetStarted }: Onboar
             <p className="text-gray-600 leading-relaxed px-2">
               {screen.description}
             </p>
+            {currentScreen === 1 && (
+              <p className="text-xs text-gray-500 leading-relaxed px-2 pt-2">
+                🌱 Luma is your AI emotional companion, here to support your journey. She isn't a therapist or medical professional.
+              </p>
+            )}
+            {currentScreen === 2 && (
+              <p className="text-xs text-gray-500 leading-relaxed px-2 pt-2">
+                🔒 Your data is private and securely stored — used only to personalize your experience.
+              </p>
+            )}
+            {currentScreen === 3 && (
+              <p className="text-xs text-gray-500 leading-relaxed px-2 pt-2">
+                By continuing, you agree to Luma's terms and conditions.
+              </p>
+            )}
           </motion.div>
 
           {/* Actions */}

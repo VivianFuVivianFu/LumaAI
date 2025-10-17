@@ -21,6 +21,7 @@ import { Card } from './ui/card';
 import { Badge } from './ui/badge';
 import { Switch } from './ui/switch';
 import { JournalSession } from './JournalScreen';
+import { useMasterAgent } from '../hooks/useMasterAgent';
 
 interface JournalCompletionScreenProps {
   session: JournalSession;
@@ -37,6 +38,7 @@ interface JournalSummary {
 }
 
 export function JournalCompletionScreen({ session, onComplete, onBack }: JournalCompletionScreenProps) {
+  const { logEvent } = useMasterAgent();
   const [summary, setSummary] = useState<JournalSummary | null>(null);
   const [isGeneratingSummary, setIsGeneratingSummary] = useState(true);
   const [useForMemory, setUseForMemory] = useState(!session.excludeFromMemory);
@@ -160,7 +162,22 @@ export function JournalCompletionScreen({ session, onComplete, onBack }: Journal
       tags: summary?.themes || [],
       emotions: summary?.emotions || []
     };
-    
+
+    // Phase 3: Log journal session completion event
+    logEvent({
+      event_type: 'journal_session_completed',
+      feature_area: 'journal',
+      event_data: {
+        session_id: session.id,
+        mode: session.mode,
+        duration_seconds: session.duration,
+        words_written: session.wordsWritten,
+        use_for_memory: useForMemory,
+        themes: summary?.themes || [],
+        emotions: summary?.emotions || [],
+      },
+    });
+
     onComplete(updatedSession);
   };
 

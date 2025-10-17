@@ -1,4 +1,5 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { authApi } from '../lib/api';
 
 interface User {
   id: string;
@@ -15,45 +16,13 @@ interface AuthState {
 
 interface AuthContextType extends AuthState {
   checkUserStatus: () => Promise<void>;
-  login: (provider: 'google' | 'hotmail') => Promise<void>;
-  register: (name: string, provider: 'google' | 'hotmail') => Promise<void>;
-  logout: () => void;
-  setUserAsExisting: () => void;
+  login: (email: string, password: string, rememberMe?: boolean) => Promise<void>;
+  register: (name: string, email: string, password: string) => Promise<void>;
+  logout: () => Promise<void>;
+  setUserAsExisting: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
-
-// Mock API functions - replace with real API calls
-const mockApiCall = (endpoint: string, data?: any): Promise<any> => {
-  return new Promise((resolve) => {
-    setTimeout(() => {
-      if (endpoint === '/api/user/status') {
-        const storedUser = localStorage.getItem('luma_user');
-        const authToken = localStorage.getItem('luma_auth_token');
-        
-        if (storedUser && authToken) {
-          const user = JSON.parse(storedUser);
-          resolve({ success: true, user, hasValidSession: true });
-        } else {
-          resolve({ success: true, user: null, hasValidSession: false });
-        }
-      } else if (endpoint === '/api/auth/login' || endpoint === '/api/auth/register') {
-        const mockUser = {
-          id: 'user_123',
-          name: data.name || 'User',
-          email: `user@${data.provider}.com`,
-          is_new_user: endpoint === '/api/auth/register'
-        };
-        
-        // Simulate token storage
-        localStorage.setItem('luma_auth_token', 'mock_token_' + Date.now());
-        localStorage.setItem('luma_user', JSON.stringify(mockUser));
-        
-        resolve({ success: true, user: mockUser });
-      }
-    }, 1000);
-  });
-};
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [authState, setAuthState] = useState<AuthState>({
@@ -65,23 +34,56 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const checkUserStatus = async () => {
     try {
       setAuthState(prev => ({ ...prev, isLoading: true }));
-      const response = await mockApiCall('/api/user/status');
-      
-      if (response.success && response.user && response.hasValidSession) {
-        setAuthState({
-          user: response.user,
-          isLoading: false,
-          isAuthenticated: true
-        });
-      } else {
+
+      // Check if we have a token
+      const token = localStorage.getItem('luma_auth_token');
+      if (!token) {
         setAuthState({
           user: null,
           isLoading: false,
           isAuthenticated: false
         });
+        return;
       }
+
+      // Check if session should expire (for non-remember-me users)
+      const rememberMe = localStorage.getItem('luma_remember_me') === 'true';
+      const loginTimestamp = localStorage.getItem('luma_login_timestamp');
+
+      if (!rememberMe && loginTimestamp) {
+        const sessionDuration = Date.now() - parseInt(loginTimestamp);
+        const maxSessionDuration = 24 * 60 * 60 * 1000; // 24 hours
+
+        if (sessionDuration > maxSessionDuration) {
+          // Session expired, clear auth data
+          localStorage.removeItem('luma_auth_token');
+          localStorage.removeItem('luma_user');
+          localStorage.removeItem('luma_login_timestamp');
+          localStorage.removeItem('luma_remember_me');
+          setAuthState({
+            user: null,
+            isLoading: false,
+            isAuthenticated: false
+          });
+          return;
+        }
+      }
+
+      // Try to get current user from API
+      const user = await authApi.getCurrentUser();
+
+      setAuthState({
+        user,
+        isLoading: false,
+        isAuthenticated: true
+      });
     } catch (error) {
       console.error('Error checking user status:', error);
+      // Token might be expired, clear it
+      localStorage.removeItem('luma_auth_token');
+      localStorage.removeItem('luma_user');
+      localStorage.removeItem('luma_login_timestamp');
+      localStorage.removeItem('luma_remember_me');
       setAuthState({
         user: null,
         isLoading: false,
@@ -90,54 +92,72 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const login = async (provider: 'google' | 'hotmail') => {
+  const login = async (email: string, password: string, rememberMe: boolean = true) => {
     try {
-      const response = await mockApiCall('/api/auth/login', { provider });
-      if (response.success) {
-        setAuthState({
-          user: response.user,
-          isLoading: false,
-          isAuthenticated: true
-        });
-      }
-    } catch (error) {
+      const result = await authApi.login({ email, password });
+
+      // Store remember me preference and login timestamp
+      localStorage.setItem('luma_remember_me', rememberMe.toString());
+      localStorage.setItem('luma_login_timestamp', Date.now().toString());
+
+      setAuthState({
+        user: result.user,
+        isLoading: false,
+        isAuthenticated: true
+      });
+    } catch (error: any) {
       console.error('Login error:', error);
+      throw new Error(error.message || 'Login failed');
     }
   };
 
-  const register = async (name: string, provider: 'google' | 'hotmail') => {
+  const register = async (name: string, email: string, password: string) => {
     try {
-      const response = await mockApiCall('/api/auth/register', { name, provider });
-      if (response.success) {
-        setAuthState({
-          user: response.user,
-          isLoading: false,
-          isAuthenticated: true
-        });
-      }
-    } catch (error) {
+      const result = await authApi.register({ name, email, password });
+
+      // New users are automatically remembered (better UX)
+      localStorage.setItem('luma_remember_me', 'true');
+      localStorage.setItem('luma_login_timestamp', Date.now().toString());
+
+      setAuthState({
+        user: result.user,
+        isLoading: false,
+        isAuthenticated: true
+      });
+    } catch (error: any) {
       console.error('Registration error:', error);
+      throw new Error(error.message || 'Registration failed');
     }
   };
 
-  const logout = () => {
-    localStorage.removeItem('luma_auth_token');
-    localStorage.removeItem('luma_user');
-    setAuthState({
-      user: null,
-      isLoading: false,
-      isAuthenticated: false
-    });
+  const logout = async () => {
+    try {
+      await authApi.logout();
+    } catch (error) {
+      console.error('Logout error:', error);
+    } finally {
+      // Clear all auth-related data
+      localStorage.removeItem('luma_remember_me');
+      localStorage.removeItem('luma_login_timestamp');
+      setAuthState({
+        user: null,
+        isLoading: false,
+        isAuthenticated: false
+      });
+    }
   };
 
-  const setUserAsExisting = () => {
+  const setUserAsExisting = async () => {
     if (authState.user) {
-      const updatedUser = { ...authState.user, is_new_user: false };
-      localStorage.setItem('luma_user', JSON.stringify(updatedUser));
-      setAuthState(prev => ({
-        ...prev,
-        user: updatedUser
-      }));
+      try {
+        const updatedUser = await authApi.updateProfile({ is_new_user: false });
+        setAuthState(prev => ({
+          ...prev,
+          user: updatedUser
+        }));
+      } catch (error) {
+        console.error('Error updating user:', error);
+      }
     }
   };
 

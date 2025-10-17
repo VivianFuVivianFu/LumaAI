@@ -1,18 +1,26 @@
-import { useState, useEffect } from "react";
-import { OnboardingScreen } from "./components/OnboardingScreen";
-import { WelcomeRegistration } from "./components/WelcomeRegistration";
-import { LoginScreen } from "./components/LoginScreen";
-import { Dashboard } from "./components/Dashboard";
-import { ProfileScreen } from "./components/ProfileScreen";
-import { GoalsScreen } from "./components/GoalsScreen";
-import { ToolsScreen } from "./components/ToolsScreen";
-import { JournalScreen } from "./components/JournalScreen";
-import { ChatScreen } from "./components/ChatScreen";
+import { useState, useEffect, lazy, Suspense } from "react";
 import { LoadingScreen } from "./components/LoadingScreen";
+import { CookieConsent } from "./components/CookieConsent";
+import { ErrorBoundary } from "./components/ErrorBoundary";
+import { OfflineIndicator } from "./components/OfflineIndicator";
 import {
   AuthProvider,
   useAuth,
 } from "./components/AuthContext";
+
+// Lazy load all major screens for better performance
+const OnboardingScreen = lazy(() => import("./components/OnboardingScreen").then(m => ({ default: m.OnboardingScreen })));
+const WelcomeRegistration = lazy(() => import("./components/WelcomeRegistration").then(m => ({ default: m.WelcomeRegistration })));
+const LoginScreen = lazy(() => import("./components/LoginScreen").then(m => ({ default: m.LoginScreen })));
+const Dashboard = lazy(() => import("./components/Dashboard").then(m => ({ default: m.Dashboard })));
+const ProfileScreen = lazy(() => import("./components/ProfileScreen").then(m => ({ default: m.ProfileScreen })));
+const GoalsScreen = lazy(() => import("./components/GoalsScreen").then(m => ({ default: m.GoalsScreen })));
+const ToolsScreen = lazy(() => import("./components/ToolsScreen").then(m => ({ default: m.ToolsScreen })));
+const JournalScreen = lazy(() => import("./components/JournalScreen").then(m => ({ default: m.JournalScreen })));
+const ChatScreen = lazy(() => import("./components/ChatScreen").then(m => ({ default: m.ChatScreen })));
+const TermsOfService = lazy(() => import("./components/TermsOfService").then(m => ({ default: m.TermsOfService })));
+const PrivacyPolicy = lazy(() => import("./components/PrivacyPolicy").then(m => ({ default: m.PrivacyPolicy })));
+const PrivacyPolicyModal = lazy(() => import("./components/PrivacyPolicyModal").then(m => ({ default: m.PrivacyPolicyModal })));
 
 function AppContent() {
   const [currentScreen, setCurrentScreen] = useState(1);
@@ -22,6 +30,8 @@ function AppContent() {
   const [showTools, setShowTools] = useState(false);
   const [showJournal, setShowJournal] = useState(false);
   const [showChat, setShowChat] = useState(false);
+  const [showTerms, setShowTerms] = useState(false);
+  const [showPrivacy, setShowPrivacy] = useState(false);
   const [userName, setUserName] = useState("");
   const {
     user,
@@ -64,6 +74,23 @@ function AppContent() {
     setShowTools(false);
     setShowJournal(false);
     setShowChat(false);
+    setShowTerms(false);
+    setShowPrivacy(false);
+  };
+
+  const handleShowTerms = () => {
+    setShowTerms(true);
+    setShowPrivacy(false);
+  };
+
+  const handleShowPrivacy = () => {
+    setShowPrivacy(true);
+    setShowTerms(false);
+  };
+
+  const handleBackFromTerms = () => {
+    setShowTerms(false);
+    setShowPrivacy(false);
   };
 
   const handleShowGoals = () => {
@@ -130,77 +157,95 @@ function AppContent() {
     // If it's a new user, show onboarding first
     if (user.is_new_user && currentScreen < 4) {
       return (
-        <OnboardingScreen
-          currentScreen={currentScreen}
-          onNext={handleNext}
-          onGetStarted={handleGetStarted}
-        />
+        <Suspense fallback={<LoadingScreen />}>
+          <OnboardingScreen
+            currentScreen={currentScreen}
+            onNext={handleNext}
+            onGetStarted={handleGetStarted}
+          />
+        </Suspense>
       );
     }
 
     // Show profile screen if requested
     if (showProfile) {
-      return <ProfileScreen onBack={handleBackToDashboard} />;
+      return (
+        <Suspense fallback={<LoadingScreen />}>
+          <ProfileScreen onBack={handleBackToDashboard} />
+        </Suspense>
+      );
     }
 
     // Show chat screen if requested
     if (showChat) {
       return (
-        <ChatScreen
-          onBack={handleBackToDashboard}
-          onShowGoals={handleShowGoals}
-          onShowJournal={handleShowJournal}
-          onShowTools={handleShowTools}
-        />
+        <Suspense fallback={<LoadingScreen />}>
+          <ChatScreen
+            onBack={handleBackToDashboard}
+            onShowGoals={handleShowGoals}
+            onShowJournal={handleShowJournal}
+            onShowTools={handleShowTools}
+          />
+        </Suspense>
       );
     }
 
     // Show goals screen if requested
     if (showGoals) {
       return (
-        <GoalsScreen
-          onBack={handleBackToDashboard}
-          onShowChat={handleShowChat}
-          onShowJournal={handleShowJournal}
-          onShowTools={handleShowTools}
-        />
+        <Suspense fallback={<LoadingScreen />}>
+          <GoalsScreen
+            onBack={handleBackToDashboard}
+            onShowChat={handleShowChat}
+            onShowJournal={handleShowJournal}
+            onShowTools={handleShowTools}
+          />
+        </Suspense>
       );
     }
 
     // Show tools screen if requested
     if (showTools) {
       return (
-        <ToolsScreen
-          onBack={handleBackToDashboard}
-          onShowChat={handleShowChat}
-          onShowGoals={handleShowGoals}
-          onShowJournal={handleShowJournal}
-        />
+        <Suspense fallback={<LoadingScreen />}>
+          <ToolsScreen
+            onBack={handleBackToDashboard}
+            onShowChat={handleShowChat}
+            onShowGoals={handleShowGoals}
+            onShowJournal={handleShowJournal}
+          />
+        </Suspense>
       );
     }
 
     // Show journal screen if requested
     if (showJournal) {
       return (
-        <JournalScreen
-          onBack={handleBackToDashboard}
-          onShowChat={handleShowChat}
-          onShowGoals={handleShowGoals}
-          onShowTools={handleShowTools}
-        />
+        <Suspense fallback={<LoadingScreen />}>
+          <JournalScreen
+            onBack={handleBackToDashboard}
+            onShowChat={handleShowChat}
+            onShowGoals={handleShowGoals}
+            onShowTools={handleShowTools}
+          />
+        </Suspense>
       );
     }
 
     // Show dashboard for authenticated users
     return (
-      <Dashboard
-        userName={user.name}
-        onShowProfile={handleShowProfile}
-        onShowGoals={handleShowGoals}
-        onShowTools={handleShowTools}
-        onShowJournal={handleShowJournal}
-        onShowChat={handleShowChat}
-      />
+      <Suspense fallback={<LoadingScreen />}>
+        <Dashboard
+          userName={user.name}
+          onShowProfile={handleShowProfile}
+          onShowGoals={handleShowGoals}
+          onShowTools={handleShowTools}
+          onShowJournal={handleShowJournal}
+          onShowChat={handleShowChat}
+          onShowTerms={handleShowTerms}
+          onShowPrivacy={handleShowPrivacy}
+        />
+      </Suspense>
     );
   }
 
@@ -208,31 +253,67 @@ function AppContent() {
   if (currentScreen < 4) {
     // Show onboarding for new users
     return (
-      <OnboardingScreen
-        currentScreen={currentScreen}
-        onNext={handleNext}
-        onGetStarted={handleGetStarted}
-      />
+      <Suspense fallback={<LoadingScreen />}>
+        <OnboardingScreen
+          currentScreen={currentScreen}
+          onNext={handleNext}
+          onGetStarted={handleGetStarted}
+        />
+      </Suspense>
     );
   }
 
-  // Show login or registration screens
+  // Show Terms if requested (full screen)
+  if (showTerms) {
+    return (
+      <Suspense fallback={<LoadingScreen />}>
+        <TermsOfService onBack={handleBackFromTerms} />
+      </Suspense>
+    );
+  }
+
+  // Show login or registration screens with Privacy modal overlay
   if (showLogin) {
-    return <LoginScreen onBack={handleBackToRegistration} />;
+    return (
+      <>
+        <Suspense fallback={<LoadingScreen />}>
+          <LoginScreen onBack={handleBackToRegistration} onShowTerms={handleShowTerms} onShowPrivacy={handleShowPrivacy} />
+        </Suspense>
+        {showPrivacy && (
+          <Suspense fallback={null}>
+            <PrivacyPolicyModal onClose={handleBackFromTerms} />
+          </Suspense>
+        )}
+      </>
+    );
   }
 
   return (
-    <WelcomeRegistration
-      onComplete={handleRegistrationComplete}
-      onShowLogin={handleShowLogin}
-    />
+    <>
+      <Suspense fallback={<LoadingScreen />}>
+        <WelcomeRegistration
+          onComplete={handleRegistrationComplete}
+          onShowLogin={handleShowLogin}
+          onShowPrivacy={handleShowPrivacy}
+        />
+      </Suspense>
+      {showPrivacy && (
+        <Suspense fallback={null}>
+          <PrivacyPolicyModal onClose={handleBackFromTerms} />
+        </Suspense>
+      )}
+    </>
   );
 }
 
 export default function App() {
   return (
-    <AuthProvider>
-      <AppContent />
-    </AuthProvider>
+    <ErrorBoundary>
+      <AuthProvider>
+        <OfflineIndicator />
+        <AppContent />
+        <CookieConsent />
+      </AuthProvider>
+    </ErrorBoundary>
   );
 }

@@ -1,0 +1,177 @@
+╔══════════════════════════════════════════════════════════════════════════════╗
+║                    LUMA ENVIRONMENT FILES STRUCTURE                          ║
+║                     (All Files Are Required!)                                ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+
+📁 Figma (Root Directory - Frontend)
+│
+├── 📄 .env                      ← ACTIVE CONFIG (Development)
+│   │  Purpose: Current environment being used by Vite
+│   │  Variables: VITE_API_URL, VITE_APP_NAME, etc.
+│   │  Status: ✅ Updated and configured
+│   │  Git: ❌ Ignored (contains active config)
+│
+├── 📄 .env.development          ← TEMPLATE (Development)
+│   │  Purpose: Template for local development
+│   │  Variables: VITE_* prefixed for Vite
+│   │  Status: ✅ Configured correctly
+│   │  Git: ✅ Can be committed (template only)
+│
+├── 📄 .env.staging              ← TEMPLATE (Staging)
+│   │  Purpose: Template for staging deployment
+│   │  Variables: VITE_* with staging URLs
+│   │  Status: ✅ Configured correctly
+│   │  Git: ✅ Can be committed (template only)
+│
+├── 📄 .env.production           ← TEMPLATE (Production)
+│   │  Purpose: Template for production deployment
+│   │  Variables: VITE_* with production URLs
+│   │  Status: ⚠️  Needs URL update before prod deployment
+│   │  Git: ✅ Can be committed (template only)
+│
+└── 📁 backend
+    │
+    ├── 📄 .env                  ← ACTIVE CONFIG (Development)
+    │   │  Purpose: Current environment for Node.js API
+    │   │  Variables: NODE_ENV, PORT, SUPABASE_*, OPENAI_API_KEY
+    │   │  Status: ✅ Configured with real credentials
+    │   │  Git: ❌ Ignored (contains secrets)
+    │
+    ├── 📄 .env.development      ← TEMPLATE (Development)
+    │   │  Purpose: Template for local development
+    │   │  Variables: Standard Node.js env vars
+    │   │  Status: ✅ Configured with real credentials
+    │
+    ├── 📄 .env.staging          ← TEMPLATE (Staging)
+    │   │  Purpose: Template for staging deployment
+    │   │  Variables: Standard Node.js with staging URLs
+    │   │  Status: ✅ Configured with real credentials
+    │
+    └── 📄 .env.production       ← TEMPLATE (Production)
+        │  Purpose: Template for production deployment
+        │  Variables: Standard Node.js with production URLs
+        │  Status: ⚠️  Needs FRONTEND_URL update before prod
+
+
+╔══════════════════════════════════════════════════════════════════════════════╗
+║                          HOW THEY WORK TOGETHER                              ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+
+  🌐 User Browser
+       │
+       ├─── Frontend (React + Vite)
+       │    Reads: .env
+       │    VITE_API_URL=http://localhost:4000/api/v1
+       │    VITE_APP_NAME=Luma
+       │         │
+       │         │ HTTP Request
+       │         ▼
+       └─── Backend (Node.js + Express)
+            Reads: backend/.env
+            NODE_ENV=development
+            PORT=4000
+            SUPABASE_URL=https://...
+            OPENAI_API_KEY=sk-proj-...
+                 │
+                 ├─── Supabase (Database)
+                 ├─── DeepSeek (AI API)
+                 └─── Langfuse (Observability)
+
+
+╔══════════════════════════════════════════════════════════════════════════════╗
+║                      SWITCHING ENVIRONMENTS                                  ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+
+┌─────────────────────┐
+│  LOCAL DEVELOPMENT  │  (Current Configuration ✅)
+└─────────────────────┘
+  Frontend: .env → Already configured
+  Backend:  backend/.env → Already configured
+  Command:  npm run dev
+
+┌─────────────────────┐
+│      STAGING        │
+└─────────────────────┘
+  Frontend: cp .env.staging .env
+  Backend:  cp backend/.env.staging backend/.env
+  Command:  ./deploy-staging.sh
+
+┌─────────────────────┐
+│    PRODUCTION       │
+└─────────────────────┘
+  Frontend: cp .env.production .env
+  Backend:  cp backend/.env.production backend/.env
+  Command:  ./deploy-production.sh
+
+
+╔══════════════════════════════════════════════════════════════════════════════╗
+║                          KEY DIFFERENCES                                     ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+
+FRONTEND .env FILES (Root directory)
+  Location:  Figma/ (root directory)
+  Purpose:   Configure React/Vite frontend
+  Prefix:    All variables MUST start with VITE_
+  Example:   VITE_API_URL=http://localhost:4000/api/v1
+  Secrets:   ❌ No backend secrets
+
+BACKEND .env FILES (Backend directory)
+  Location:  Figma/backend/
+  Purpose:   Configure Node.js/Express backend
+  Prefix:    Standard environment variables (no prefix)
+  Example:   PORT=4000, SUPABASE_URL=..., OPENAI_API_KEY=...
+  Secrets:   ✅ Contains real API keys and credentials
+
+
+╔══════════════════════════════════════════════════════════════════════════════╗
+║                          IMPORTANT REMINDERS                                 ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+
+✅ DO:
+  • Keep all .env files (they are all needed!)
+  • Use VITE_ prefix for frontend variables
+  • Use standard names for backend variables
+  • Update URLs before production deployment
+
+❌ DO NOT:
+  • Delete any .env files (they are NOT duplicates!)
+  • Mix frontend and backend variables
+  • Commit .env files with real secrets
+  • Use backend variables in frontend .env files
+
+
+╔══════════════════════════════════════════════════════════════════════════════╗
+║                             FILES STATUS                                     ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+
+FRONTEND FILES:
+  ✅ .env                  - Updated and configured
+  ✅ .env.development      - Correct
+  ✅ .env.staging          - Correct
+  ⚠️  .env.production      - Needs URL update before production
+
+BACKEND FILES:
+  ✅ backend/.env              - Configured with credentials
+  ✅ backend/.env.development  - Configured with credentials
+  ✅ backend/.env.staging      - Configured with credentials
+  ⚠️  backend/.env.production  - Needs URL update before production
+
+DOCUMENTATION:
+  ✅ ENV_FILES_GUIDE.md        - Complete guide
+  ✅ ENV_CLEANUP_SUMMARY.md    - Summary
+  ✅ ENV_STRUCTURE.txt         - This diagram
+
+
+╔══════════════════════════════════════════════════════════════════════════════╗
+║                              CONCLUSION                                      ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+
+❌ NO FILES WERE DELETED - They are NOT duplicates!
+
+✅ All environment files serve unique purposes
+✅ Frontend files configure React/Vite (VITE_* variables)
+✅ Backend files configure Node.js API (standard variables)
+✅ System is properly configured for local development
+✅ Ready for staging and production deployment
+
+🎯 NEXT STEP: npm run dev (already configured!)

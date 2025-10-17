@@ -34,11 +34,12 @@ export function GoalCard({ goal, onToggleAction, goalCategories, getInsightForCa
                 >
                   {category?.name || 'Personal Growth'}
                 </Badge>
-                <Badge 
-                  variant="outline" 
+                <Badge
+                  variant="outline"
                   className="text-xs border-gray-300 text-gray-600"
                 >
-                  {goal.timeframe === 'short' ? 'Short-term' : 'Long-term'}
+                  {goal.timeframe === '3-months' ? '3 Months' :
+                   goal.timeframe === '6-months' ? '6 Months' : '12 Months'}
                 </Badge>
               </div>
             </div>
@@ -56,35 +57,37 @@ export function GoalCard({ goal, onToggleAction, goalCategories, getInsightForCa
       </div>
 
       {/* Weekly Actions */}
-      <div className="px-6 pb-4">
-        <h4 className="text-gray-900 mb-3">This Week's Plan</h4>
-        <div className="space-y-2">
-          {goal.weeklyActions.map((action) => (
-            <motion.button
-              key={action.id}
-              onClick={() => onToggleAction(goal.id, action.id)}
-              className="w-full flex items-center gap-3 p-3 rounded-lg hover:bg-gray-50 transition-colors duration-200 text-left"
-              whileHover={{ scale: 1.01 }}
-              whileTap={{ scale: 0.99 }}
-            >
-              {action.completed ? (
-                <CheckCircle2 className="w-5 h-5 text-green-500 flex-shrink-0" />
-              ) : (
-                <Circle className="w-5 h-5 text-gray-400 flex-shrink-0" />
-              )}
-              <span 
-                className={`${
-                  action.completed 
-                    ? 'text-gray-500 line-through' 
-                    : 'text-gray-900'
-                }`}
+      {goal.weeklyActions && goal.weeklyActions.length > 0 && (
+        <div className="px-6 pb-4">
+          <h4 className="text-gray-900 mb-3">This Week's Plan</h4>
+          <div className="space-y-2">
+            {goal.weeklyActions.map((action) => (
+              <motion.button
+                key={action.id}
+                onClick={() => onToggleAction(goal.id, action.id)}
+                className="w-full flex items-center gap-3 p-3 rounded-lg hover:bg-gray-50 transition-colors duration-200 text-left"
+                whileHover={{ scale: 1.01 }}
+                whileTap={{ scale: 0.99 }}
               >
-                {action.title}
-              </span>
-            </motion.button>
-          ))}
+                {action.completed ? (
+                  <CheckCircle2 className="w-5 h-5 text-green-500 flex-shrink-0" />
+                ) : (
+                  <Circle className="w-5 h-5 text-gray-400 flex-shrink-0" />
+                )}
+                <span
+                  className={`${
+                    action.completed
+                      ? 'text-gray-500 line-through'
+                      : 'text-gray-900'
+                  }`}
+                >
+                  {action.text}
+                </span>
+              </motion.button>
+            ))}
+          </div>
         </div>
-      </div>
+      )}
 
       {/* AI Insight */}
       <div className={`mx-6 mb-6 p-4 bg-gradient-to-r ${category?.gradientClass || 'from-purple-400 to-purple-500'} rounded-lg`}>

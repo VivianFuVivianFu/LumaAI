@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { motion } from 'motion/react';
-import { 
-  ArrowLeft, 
+import {
+  ArrowLeft,
   Send,
   MessageCircle,
   Target,
@@ -16,6 +16,9 @@ import {
 } from 'lucide-react';
 import { Button } from './ui/button';
 import { Card } from './ui/card';
+import { NudgeCard } from './NudgeCard';
+import { chatApi } from '../lib/api';
+import { useMasterAgent } from '../hooks/useMasterAgent';
 
 interface ChatScreenProps {
   onBack: () => void;
@@ -44,7 +47,13 @@ export function ChatScreen({ onBack, onShowGoals, onShowJournal, onShowTools }: 
   const [inputMessage, setInputMessage] = useState('');
   const [isRecording, setIsRecording] = useState(false);
   const [isTyping, setIsTyping] = useState(false);
+  const [conversationId, setConversationId] = useState<string | null>(null);
+  const [isLoadingConversation, setIsLoadingConversation] = useState(true);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  // Phase 3: Master Agent hook
+  const { logEvent, fetchNudges, acceptNudge, dismissNudge } = useMasterAgent();
+  const [chatNudges, setChatNudges] = useState<any[]>([]);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -54,8 +63,42 @@ export function ChatScreen({ onBack, onShowGoals, onShowJournal, onShowTools }: 
     scrollToBottom();
   }, [messages]);
 
+  // Create conversation on mount
+  useEffect(() => {
+    const initConversation = async () => {
+      try {
+        const result = await chatApi.createConversation('New Chat with Luma');
+        setConversationId(result.conversation.id);
+
+        // Phase 3: Log conversation start event
+        logEvent({
+          event_type: 'conversation_started',
+          feature_area: 'chat',
+          event_data: {
+            conversation_id: result.conversation.id,
+          },
+        });
+      } catch (error) {
+        console.error('Failed to create conversation:', error);
+      } finally {
+        setIsLoadingConversation(false);
+      }
+    };
+
+    initConversation();
+  }, []);
+
+  // Load nudges on mount
+  useEffect(() => {
+    const loadNudges = async () => {
+      const nudges = await fetchNudges('chat');
+      setChatNudges(nudges);
+    };
+    loadNudges();
+  }, [fetchNudges]);
+
   const handleSendMessage = async () => {
-    if (!inputMessage.trim()) return;
+    if (!inputMessage.trim() || !conversationId) return;
 
     const userMessage: ChatMessage = {
       id: Date.now().toString(),
@@ -64,21 +107,78 @@ export function ChatScreen({ onBack, onShowGoals, onShowJournal, onShowTools }: 
       timestamp: new Date(),
     };
 
+    const currentInput = inputMessage;
     setMessages(prev => [...prev, userMessage]);
     setInputMessage('');
     setIsTyping(true);
 
-    // Simulate AI response (in real app, this would call your AI API)
-    setTimeout(() => {
-      const lumaResponse: ChatMessage = {
-        id: (Date.now() + 1).toString(),
-        content: generateResponse(inputMessage),
-        sender: 'luma',
-        timestamp: new Date(),
-      };
-      setMessages(prev => [...prev, lumaResponse]);
+    // Create placeholder for streaming response
+    const streamingMessageId = (Date.now() + 1).toString();
+    const streamingMessage: ChatMessage = {
+      id: streamingMessageId,
+      content: '',
+      sender: 'luma',
+      timestamp: new Date(),
+    };
+    setMessages(prev => [...prev, streamingMessage]);
+
+    try {
+      // Call backend API with streaming
+      const result = await chatApi.sendMessage(
+        conversationId,
+        currentInput,
+        (chunk) => {
+          // Update the streaming message with new chunks
+          setMessages(prev =>
+            prev.map(msg =>
+              msg.id === streamingMessageId
+                ? { ...msg, content: msg.content + chunk }
+                : msg
+            )
+          );
+        }
+      );
+
+      // Update with final assistant message data
+      setMessages(prev =>
+        prev.map(msg =>
+          msg.id === streamingMessageId
+            ? {
+                ...msg,
+                id: result.assistantMessage.id,
+                content: result.assistantMessage.content,
+                timestamp: new Date(result.assistantMessage.created_at),
+              }
+            : msg
+        )
+      );
+
+      // Phase 3: Log message sent event
+      logEvent({
+        event_type: 'message_sent',
+        feature_area: 'chat',
+        event_data: {
+          conversation_id: conversationId,
+          message_length: currentInput.length,
+        },
+      });
+    } catch (error) {
+      console.error('Failed to send message:', error);
+
+      // Replace streaming message with error fallback
+      setMessages(prev =>
+        prev.map(msg =>
+          msg.id === streamingMessageId
+            ? {
+                ...msg,
+                content: generateResponse(currentInput),
+              }
+            : msg
+        )
+      );
+    } finally {
       setIsTyping(false);
-    }, 1500);
+    }
   };
 
   const generateResponse = (userInput: string): string => {
@@ -157,6 +257,27 @@ export function ChatScreen({ onBack, onShowGoals, onShowJournal, onShowTools }: 
       {/* Chat Messages */}
       <div className="flex-1 px-6 py-4 pb-32 max-h-[calc(100vh-200px)] overflow-y-auto">
         <div className="space-y-4">
+          {/* Nudges Section */}
+          {chatNudges.length > 0 && (
+            <div className="space-y-3 mb-6">
+              {chatNudges
+                .filter((nudge) => nudge.status === 'pending')
+                .map((nudge) => (
+                  <NudgeCard
+                    key={nudge.id}
+                    nudge={nudge}
+                    onAccept={acceptNudge}
+                    onDismiss={dismissNudge}
+                    onNavigate={(route) => {
+                      if (route.includes('goals')) onShowGoals?.();
+                      else if (route.includes('journal')) onShowJournal?.();
+                      else if (route.includes('tools')) onShowTools?.();
+                    }}
+                  />
+                ))}
+            </div>
+          )}
+
           {messages.map((message) => (
             <motion.div
               key={message.id}

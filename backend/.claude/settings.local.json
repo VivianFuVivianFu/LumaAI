@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(//c/Users/vivia/OneDrive/Desktop/Figma/src/components/**)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { motion } from 'motion/react';
-import { Mail, Heart, Loader2 } from 'lucide-react';
+import { Heart, Loader2, Mail, Lock, User } from 'lucide-react';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { useAuth } from './AuthContext';
@@ -8,49 +8,49 @@ import { useAuth } from './AuthContext';
 interface WelcomeRegistrationProps {
   onComplete: (name: string) => void;
   onShowLogin: () => void;
+  onShowPrivacy?: () => void;
 }
 
-export function WelcomeRegistration({ onComplete, onShowLogin }: WelcomeRegistrationProps) {
+export function WelcomeRegistration({ onComplete, onShowLogin, onShowPrivacy }: WelcomeRegistrationProps) {
   const [name, setName] = useState('');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [loadingProvider, setLoadingProvider] = useState<string | null>(null);
+  const [error, setError] = useState('');
   const { register } = useAuth();
 
-  const handleNameSubmit = async () => {
-    if (name.trim()) {
-      setIsLoading(true);
-      try {
-        // Register user with a default provider when they continue with just name
-        await register(name.trim(), 'google');
-        onComplete(name.trim());
-      } catch (error) {
-        console.error('Registration failed:', error);
-      } finally {
-        setIsLoading(false);
-      }
-    }
-  };
+  const handleRegister = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
 
-  const handleKeyPress = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter') {
-      handleNameSubmit();
-    }
-  };
-
-  const handleRegister = async (provider: 'google' | 'hotmail') => {
+    // Validation
     if (!name.trim()) {
+      setError('Please enter your name');
       return;
     }
-    
+    if (!email.trim()) {
+      setError('Please enter your email');
+      return;
+    }
+    if (password.length < 8) {
+      setError('Password must be at least 8 characters');
+      return;
+    }
+    if (password !== confirmPassword) {
+      setError('Passwords do not match');
+      return;
+    }
+
     setIsLoading(true);
-    setLoadingProvider(provider);
     try {
-      await register(name.trim(), provider);
-    } catch (error) {
+      await register(name.trim(), email.trim(), password);
+      onComplete(name.trim());
+    } catch (error: any) {
+      setError(error.message || 'Registration failed. Please try again.');
       console.error('Registration failed:', error);
     } finally {
       setIsLoading(false);
-      setLoadingProvider(null);
     }
   };
 
@@ -73,123 +73,131 @@ export function WelcomeRegistration({ onComplete, onShowLogin }: WelcomeRegistra
             >
               <Heart className="w-8 h-8 text-white" />
             </motion.div>
-            
+
             <div className="space-y-2">
               <h1 className="text-2xl font-semibold text-gray-900">
-                What should I call you?
+                Create your account
               </h1>
               <p className="text-gray-600 leading-relaxed">
-                I'd love to know your name so our conversations feel more personal.
+                Start your journey to better mental wellness
               </p>
             </div>
           </motion.div>
 
-          {/* Name Input */}
-          <motion.div
+          {/* Registration Form */}
+          <motion.form
             className="space-y-4"
             initial={{ y: 20, opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}
             transition={{ duration: 0.6, delay: 0.3 }}
+            onSubmit={handleRegister}
           >
+            {/* Name Input */}
             <div className="relative">
+              <User className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
               <Input
                 type="text"
-                placeholder="Enter your name..."
+                placeholder="Your name"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                onKeyPress={handleKeyPress}
-                className="w-full h-12 px-4 rounded-xl border-gray-200 focus:border-purple-400 focus:ring-purple-400 bg-white/80 backdrop-blur-sm shadow-sm"
+                className="w-full h-12 pl-10 pr-4 rounded-xl border-gray-200 focus:border-purple-400 focus:ring-purple-400 bg-white/80 backdrop-blur-sm shadow-sm"
               />
             </div>
-          </motion.div>
 
-          {/* Sign Up Section */}
-          <motion.div
-            className="space-y-4"
-            initial={{ y: 20, opacity: 0 }}
-            animate={{ y: 0, opacity: 1 }}
-            transition={{ duration: 0.6, delay: 0.4 }}
-          >
-            <div className="space-y-3">
-              <h3 className="text-gray-900 font-medium">Sign up</h3>
-              <div className="space-y-3">
-                <Button
-                  disabled={!name.trim() || isLoading}
-                  variant="outline"
-                  className="w-full h-12 border-gray-200 hover:border-gray-300 bg-white/80 backdrop-blur-sm rounded-xl transition-all duration-200 hover:shadow-md disabled:opacity-50"
-                  onClick={() => handleRegister('google')}
-                >
-                  <div className="flex items-center justify-center gap-3">
-                    {loadingProvider === 'google' ? (
-                      <Loader2 className="w-5 h-5 animate-spin" />
-                    ) : (
-                      <div className="w-5 h-5 bg-gradient-to-r from-blue-500 to-red-500 rounded-full flex items-center justify-center">
-                        <span className="text-white text-xs font-bold">G</span>
-                      </div>
-                    )}
-                    <span className="text-gray-700">Continue with Google</span>
-                  </div>
-                </Button>
-                
-                <Button
-                  disabled={!name.trim() || isLoading}
-                  variant="outline"
-                  className="w-full h-12 border-gray-200 hover:border-gray-300 bg-white/80 backdrop-blur-sm rounded-xl transition-all duration-200 hover:shadow-md disabled:opacity-50"
-                  onClick={() => handleRegister('hotmail')}
-                >
-                  <div className="flex items-center justify-center gap-3">
-                    {loadingProvider === 'hotmail' ? (
-                      <Loader2 className="w-5 h-5 animate-spin" />
-                    ) : (
-                      <Mail className="w-5 h-5 text-blue-600" />
-                    )}
-                    <span className="text-gray-700">Continue with Hotmail</span>
-                  </div>
-                </Button>
-              </div>
+            {/* Email Input */}
+            <div className="relative">
+              <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
+              <Input
+                type="email"
+                placeholder="Email address"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className="w-full h-12 pl-10 pr-4 rounded-xl border-gray-200 focus:border-purple-400 focus:ring-purple-400 bg-white/80 backdrop-blur-sm shadow-sm"
+              />
             </div>
-          </motion.div>
+
+            {/* Password Input */}
+            <div className="relative">
+              <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
+              <Input
+                type="password"
+                placeholder="Password (min 8 characters)"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="w-full h-12 pl-10 pr-4 rounded-xl border-gray-200 focus:border-purple-400 focus:ring-purple-400 bg-white/80 backdrop-blur-sm shadow-sm"
+              />
+            </div>
+
+            {/* Confirm Password Input */}
+            <div className="relative">
+              <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
+              <Input
+                type="password"
+                placeholder="Confirm password"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                className="w-full h-12 pl-10 pr-4 rounded-xl border-gray-200 focus:border-purple-400 focus:ring-purple-400 bg-white/80 backdrop-blur-sm shadow-sm"
+              />
+            </div>
+
+            {/* Error Message */}
+            {error && (
+              <motion.div
+                initial={{ opacity: 0, y: -10 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="text-red-600 text-sm bg-red-50 p-3 rounded-lg"
+              >
+                {error}
+              </motion.div>
+            )}
+
+            {/* Register Button */}
+            <Button
+              type="submit"
+              disabled={isLoading}
+              className="w-full bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white rounded-xl h-12 shadow-lg hover:shadow-xl transition-all duration-200 disabled:opacity-50"
+            >
+              {isLoading ? (
+                <div className="flex items-center gap-2">
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <span>Creating account...</span>
+                </div>
+              ) : (
+                'Create Account'
+              )}
+            </Button>
+          </motion.form>
 
           {/* Login Section */}
           <motion.div
-            className="space-y-4"
+            className="text-center"
             initial={{ y: 20, opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}
             transition={{ duration: 0.6, delay: 0.5 }}
           >
-            <div className="space-y-3">
-              <button
-                onClick={onShowLogin}
-                className="text-gray-600 text-sm hover:text-gray-800 transition-colors"
-              >
-                Already have an account? <span className="font-medium text-purple-600 hover:text-purple-700">Login</span>
-              </button>
-            </div>
+            <button
+              onClick={onShowLogin}
+              className="text-gray-600 text-sm hover:text-gray-800 transition-colors"
+            >
+              Already have an account? <span className="font-medium text-purple-600 hover:text-purple-700">Login</span>
+            </button>
           </motion.div>
 
-          {/* Continue Button - Only shown when name is entered */}
-          {name.trim() && (
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.3 }}
+          {/* Terms and Privacy Links */}
+          <motion.div
+            className="text-center text-xs text-gray-500"
+            initial={{ y: 20, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            transition={{ duration: 0.6, delay: 0.6 }}
+          >
+            By signing up, you agree to Luma's{' '}
+            <button
+              onClick={onShowPrivacy}
+              className="text-gray-500 hover:text-gray-700 underline"
             >
-              <Button
-                onClick={handleNameSubmit}
-                disabled={isLoading}
-                className="w-full bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white rounded-xl h-12 shadow-lg hover:shadow-xl transition-all duration-200 disabled:opacity-50"
-              >
-                {isLoading && !loadingProvider ? (
-                  <div className="flex items-center gap-2">
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                    <span>Creating account...</span>
-                  </div>
-                ) : (
-                  `Continue as ${name}`
-                )}
-              </Button>
-            </motion.div>
-          )}
+              terms and conditions
+            </button>
+          </motion.div>
         </div>
       </div>
 

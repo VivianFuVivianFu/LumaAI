@@ -1,11 +1,14 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion } from 'motion/react';
-import { 
-  User, 
-  Bell, 
-  MessageCircle, 
-  Target, 
-  BookOpen, 
+import { dashboardApi } from '../lib/api';
+import { useMasterAgent } from '../hooks/useMasterAgent';
+import { NudgeCard } from './NudgeCard';
+import {
+  User,
+  Bell,
+  MessageCircle,
+  Target,
+  BookOpen,
   Star,
   Heart,
   Users,
@@ -31,6 +34,8 @@ interface DashboardProps {
   onShowTools: () => void;
   onShowJournal: () => void;
   onShowChat: () => void;
+  onShowTerms?: () => void;
+  onShowPrivacy?: () => void;
 }
 
 const moodEmojis = [
@@ -85,11 +90,24 @@ const progressData = {
   aiSummary: 'Your energy has been steady this week, and your journaling streak is growing. You\'re 60% toward your boundary goal—next step: draft your first script.'
 };
 
-export function Dashboard({ userName, onShowProfile, onShowGoals, onShowTools, onShowJournal, onShowChat }: DashboardProps) {
+export function Dashboard({ userName, onShowProfile, onShowGoals, onShowTools, onShowJournal, onShowChat, onShowTerms, onShowPrivacy }: DashboardProps) {
   const [selectedMood, setSelectedMood] = useState<number | null>(null);
   const [moodSliderValue, setMoodSliderValue] = useState([3]); // Default to neutral (3 out of 5)
   const [journeyCardIndex, setJourneyCardIndex] = useState(0);
   const [moodSubmitted, setMoodSubmitted] = useState(false);
+
+  // Phase 3: Master Agent hook
+  const { logEvent, fetchNudges, acceptNudge, dismissNudge, nudges } = useMasterAgent();
+  const [dashboardNudges, setDashboardNudges] = useState<any[]>([]);
+
+  // Fetch nudges on mount
+  useEffect(() => {
+    const loadNudges = async () => {
+      const nudges = await fetchNudges('home');
+      setDashboardNudges(nudges);
+    };
+    loadNudges();
+  }, [fetchNudges]);
 
   // Dynamic greeting based on time of day
   const getGreeting = () => {
@@ -115,21 +133,30 @@ export function Dashboard({ userName, onShowProfile, onShowGoals, onShowTools, o
 
   const handleMoodSubmit = async () => {
     try {
-      // Here you would submit to Supabase mood_checkins table
-      console.log('Submitting mood to Supabase:', {
+      // Submit to backend API
+      await dashboardApi.submitMoodCheckin({
         mood_value: moodSliderValue[0],
-        timestamp: new Date().toISOString(),
-        user_id: 'current_user_id' // Would come from auth context
       });
-      
+
+      // Phase 3: Log mood check-in event
+      logEvent({
+        event_type: 'mood_checkin_completed',
+        feature_area: 'dashboard',
+        event_data: {
+          mood_value: moodSliderValue[0],
+          timestamp: new Date().toISOString(),
+        },
+      });
+
       setMoodSubmitted(true);
-      
+
       // Reset submitted state after 3 seconds
       setTimeout(() => {
         setMoodSubmitted(false);
       }, 3000);
     } catch (error) {
       console.error('Error submitting mood:', error);
+      alert('Failed to submit mood check-in. Please try again.');
     }
   };
 
@@ -137,35 +164,57 @@ export function Dashboard({ userName, onShowProfile, onShowGoals, onShowTools, o
     <div className="min-h-screen bg-gradient-to-br from-purple-50 via-pink-50 to-orange-50">
       {/* Header */}
       <motion.div
-        className="flex justify-between items-center p-6 pt-12"
+        className="p-6 pt-12"
         initial={{ y: -20, opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}
         transition={{ duration: 0.6 }}
       >
-        <motion.button 
-          onClick={onShowProfile}
-          className="px-4 py-2 bg-white/80 backdrop-blur-sm rounded-full shadow-sm border border-white/50 hover:shadow-md hover:bg-white/90 transition-all duration-200 flex items-center gap-2"
-          whileHover={{ scale: 1.02 }}
-          whileTap={{ scale: 0.98 }}
-        >
-          <div className="w-6 h-6 bg-gradient-to-br from-purple-400 to-pink-400 rounded-full flex items-center justify-center">
-            <User className="w-3 h-3 text-white" />
+        {/* Single Row: My Profile, Feedback (with call-to-action text), and Home - All at Same Level */}
+        <div className="flex justify-between items-center gap-4">
+          {/* My Profile Button */}
+          <motion.button
+            onClick={onShowProfile}
+            className="px-4 py-2 bg-white/80 backdrop-blur-sm rounded-full shadow-sm border border-white/50 hover:shadow-md hover:bg-white/90 transition-all duration-200 flex items-center gap-2"
+            whileHover={{ scale: 1.02 }}
+            whileTap={{ scale: 0.98 }}
+          >
+            <div className="w-6 h-6 bg-gradient-to-br from-purple-400 to-pink-400 rounded-full flex items-center justify-center">
+              <User className="w-3 h-3 text-white" />
+            </div>
+            <span className="text-gray-900 text-sm">My profile</span>
+          </motion.button>
+
+          {/* Feedback Section - Center with Call-to-Action */}
+          <div className="flex flex-col items-center gap-1">
+            <p className="text-gray-600 text-xs text-center leading-tight">
+              We'd love to hear your thoughts — your feedback helps us make Luma better!
+            </p>
+            <motion.a
+              href="https://tally.so/r/3y5yNp"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-br from-purple-500 to-pink-500 text-white rounded-full shadow-sm hover:shadow-md transition-all duration-200 text-sm font-medium"
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
+            >
+              <MessageCircle className="w-4 h-4" />
+              <span>Share Feedback</span>
+            </motion.a>
           </div>
-          <span className="text-gray-900">My profile</span>
-        </motion.button>
-        
-        <motion.button 
-          className="w-10 h-10 bg-gradient-to-br from-purple-500 to-pink-500 rounded-full flex items-center justify-center shadow-lg hover:shadow-xl transition-all duration-200"
-          whileHover={{ scale: 1.05 }}
-          whileTap={{ scale: 0.95 }}
-        >
-          <Home className="w-5 h-5 text-white" />
-        </motion.button>
+
+          {/* Home Icon Button */}
+          <motion.button
+            className="w-10 h-10 bg-gradient-to-br from-purple-500 to-pink-500 rounded-full flex items-center justify-center shadow-lg hover:shadow-xl transition-all duration-200"
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
+          >
+            <Home className="w-5 h-5 text-white" />
+          </motion.button>
+        </div>
       </motion.div>
 
-
-
       <div className="px-6 space-y-6 pb-24">
+
         {/* Greeting Section - Moved to Top */}
         <motion.div
           initial={{ y: 20, opacity: 0 }}
@@ -185,9 +234,37 @@ export function Dashboard({ userName, onShowProfile, onShowGoals, onShowTools, o
               </div>
             </div>
           </Card>
-          
-          <Separator className="mt-6" />
         </motion.div>
+
+        <Separator />
+
+        {/* Nudges Section */}
+        {dashboardNudges.length > 0 && (
+          <motion.div
+            initial={{ y: 20, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            transition={{ duration: 0.6, delay: 0.25 }}
+            className="space-y-3"
+          >
+            {dashboardNudges
+              .filter((nudge) => nudge.status === 'pending')
+              .map((nudge) => (
+                <NudgeCard
+                  key={nudge.id}
+                  nudge={nudge}
+                  onAccept={acceptNudge}
+                  onDismiss={dismissNudge}
+                  onNavigate={(route) => {
+                    // Navigate based on route
+                    if (route.includes('goals')) onShowGoals();
+                    else if (route.includes('journal')) onShowJournal();
+                    else if (route.includes('chat')) onShowChat();
+                    else if (route.includes('tools')) onShowTools();
+                  }}
+                />
+              ))}
+          </motion.div>
+        )}
 
         {/* Mood Check-in Section */}
         <motion.div
@@ -490,6 +567,7 @@ export function Dashboard({ userName, onShowProfile, onShowGoals, onShowTools, o
           
           <Separator className="mt-6" />
         </motion.div>
+
       </div>
 
       {/* Bottom Navigation */}

@@ -55,6 +55,7 @@
     },
     server: {
       port: 3000,
+      strictPort: true, // Fail if port is already in use instead of switching
       open: true,
     },
   });

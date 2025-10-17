@@ -1,15 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 
-  <!DOCTYPE html>
-  <html lang="en">
-    <head>
-      <meta charset="UTF-8" />
-      <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-      <title>FigmaLuma (Final)</title>
-    </head>
+    <!-- Primary Meta Tags -->
+    <title>Luma - AI-Powered Mental Wellness Companion</title>
+    <meta name="title" content="Luma - AI-Powered Mental Wellness Companion" />
+    <meta name="description" content="Transform your mental wellness journey with Luma - your personal AI companion for mindfulness, journaling, goal tracking, and emotional support." />
+    <meta name="keywords" content="mental wellness, AI therapy, mindfulness, journaling, goal tracking, emotional support, mental health app" />
+    <meta name="author" content="Luma" />
+    <meta name="robots" content="index, follow" />
 
-    <body>
-      <div id="root"></div>
-      <script type="module" src="/src/main.tsx"></script>
-    </body>
-  </html>
-  
+    <!-- Theme Color -->
+    <meta name="theme-color" content="#9333ea" />
+
+    <!-- Open Graph / Facebook -->
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://luma.app/" />
+    <meta property="og:title" content="Luma - AI-Powered Mental Wellness Companion" />
+    <meta property="og:description" content="Transform your mental wellness journey with Luma - your personal AI companion for mindfulness, journaling, goal tracking, and emotional support." />
+    <meta property="og:image" content="https://luma.app/og-image.png" />
+    <meta property="og:site_name" content="Luma" />
+
+    <!-- Twitter -->
+    <meta property="twitter:card" content="summary_large_image" />
+    <meta property="twitter:url" content="https://luma.app/" />
+    <meta property="twitter:title" content="Luma - AI-Powered Mental Wellness Companion" />
+    <meta property="twitter:description" content="Transform your mental wellness journey with Luma - your personal AI companion for mindfulness, journaling, goal tracking, and emotional support." />
+    <meta property="twitter:image" content="https://luma.app/twitter-image.png" />
+
+    <!-- Security Headers (meta tags) -->
+    <meta http-equiv="X-Content-Type-Options" content="nosniff" />
+    <meta http-equiv="X-Frame-Options" content="DENY" />
+    <meta http-equiv="X-XSS-Protection" content="1; mode=block" />
+    <meta http-equiv="Referrer-Policy" content="strict-origin-when-cross-origin" />
+
+    <!-- Content Security Policy -->
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; connect-src 'self' http://localhost:4000 https://*.supabase.co https://cloud.langfuse.com https://*.sentry.io;" />
+
+    <!-- PWA Meta Tags -->
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Luma" />
+
+    <!-- Favicon -->
+    <link rel="icon" type="image/svg+xml" href="/luma-icon.svg" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png" />
+    <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png" />
+
+    <!-- PWA Manifest -->
+    <link rel="manifest" href="/manifest.json" />
+
+    <!-- Preconnect to API -->
+    <link rel="preconnect" href="http://localhost:4000" />
+    <link rel="dns-prefetch" href="http://localhost:4000" />
+  </head>
+
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

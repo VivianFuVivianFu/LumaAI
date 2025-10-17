@@ -1,6 +1,7 @@
+import { useState, useEffect } from 'react';
 import { motion } from 'motion/react';
-import { 
-  ArrowLeft, 
+import {
+  ArrowLeft,
   MessageCircle,
   Target,
   BookOpen,
@@ -8,6 +9,11 @@ import {
   Home
 } from 'lucide-react';
 import { ToolCard } from './ToolCard';
+import { NudgeCard } from './NudgeCard';
+import { BrainExerciseScreen } from './BrainExerciseScreen';
+import { NarrativeScreen } from './NarrativeScreen';
+import { FutureMeScreen } from './FutureMeScreen';
+import { useMasterAgent } from '../hooks/useMasterAgent';
 
 interface ToolsScreenProps {
   onBack: () => void;
@@ -20,8 +26,8 @@ const tools = [
   {
     id: 'reframe-mindset',
     icon: '🧠',
-    title: 'Reframe Mindset',
-    purpose: 'Break old patterns with CBT & NLP practices.',
+    title: 'Empower My Brain',
+    purpose: 'Neuroplasticity Exercises',
     flow: '',
     route: '/tools/reframe'
   },
@@ -44,10 +50,41 @@ const tools = [
 ];
 
 export function ToolsScreen({ onBack, onShowChat, onShowGoals, onShowJournal }: ToolsScreenProps) {
+  const [activeTool, setActiveTool] = useState<string | null>(null);
+
+  // Phase 3: Master Agent hook
+  const { fetchNudges, acceptNudge, dismissNudge } = useMasterAgent();
+  const [toolsNudges, setToolsNudges] = useState<any[]>([]);
+
+  // Load nudges on mount
+  useEffect(() => {
+    const loadNudges = async () => {
+      const nudges = await fetchNudges('tools');
+      setToolsNudges(nudges);
+    };
+    loadNudges();
+  }, [fetchNudges]);
+
   const handleToolClick = (toolId: string) => {
-    // For now, just log the tool click. In the full app, this would open specific tool interfaces
-    console.log('Opening tool:', toolId);
+    setActiveTool(toolId);
   };
+
+  const handleToolBack = () => {
+    setActiveTool(null);
+  };
+
+  // Render specific tool screen
+  if (activeTool === 'reframe-mindset') {
+    return <BrainExerciseScreen onBack={handleToolBack} />;
+  }
+
+  if (activeTool === 'my-new-narrative') {
+    return <NarrativeScreen onBack={handleToolBack} />;
+  }
+
+  if (activeTool === 'future-me') {
+    return <FutureMeScreen onBack={handleToolBack} />;
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-purple-50 via-pink-50 to-orange-50">
@@ -93,6 +130,32 @@ export function ToolsScreen({ onBack, onShowChat, onShowGoals, onShowJournal }: 
             "Grow your mind, your story, and your future self."
           </p>
         </motion.div>
+
+        {/* Nudges Section */}
+        {toolsNudges.length > 0 && (
+          <motion.div
+            initial={{ y: 20, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            transition={{ duration: 0.6, delay: 0.15 }}
+            className="space-y-3"
+          >
+            {toolsNudges
+              .filter((nudge) => nudge.status === 'pending')
+              .map((nudge) => (
+                <NudgeCard
+                  key={nudge.id}
+                  nudge={nudge}
+                  onAccept={acceptNudge}
+                  onDismiss={dismissNudge}
+                  onNavigate={(route) => {
+                    if (route.includes('goals')) onShowGoals?.();
+                    else if (route.includes('journal')) onShowJournal?.();
+                    else if (route.includes('chat')) onShowChat?.();
+                  }}
+                />
+              ))}
+          </motion.div>
+        )}
 
         {/* Tools List */}
         <motion.div
