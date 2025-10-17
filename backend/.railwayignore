@@ -1,0 +1,29 @@
+# Exclude from Railway deployment
+
+# Documentation
+*.md
+!README.md
+
+# Database setup files
+database/
+*.sql
+*.dump
+
+# Test files
+tests/
+test-*.js
+check-*.js
+*.test.ts
+*.spec.ts
+
+# Debug scripts
+debug-helper.*
+scripts/
+
+# IDE
+.vscode/
+.idea/
+.claude/
+
+# Build output (will be rebuilt on Railway)
+dist/

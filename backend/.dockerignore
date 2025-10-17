@@ -1,0 +1,63 @@
+# Dependencies (will be installed in Docker)
+node_modules
+npm-debug.log
+yarn-error.log
+
+# Build output (will be generated in Docker)
+dist
+build
+*.tsbuildinfo
+
+# Environment files (use Railway env vars instead)
+.env
+.env.*
+!.env.example
+
+# Git
+.git
+.gitignore
+.github
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+.claude
+
+# Documentation
+*.md
+!README.md
+
+# Test files
+tests
+*.test.ts
+*.spec.ts
+coverage
+
+# Database files
+*.sql
+*.dump
+database/
+
+# Scripts
+scripts/
+debug-helper.*
+test-*.js
+check-*.js
+
+# Logs
+logs
+*.log
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Temporary files
+*.tmp
+*.temp
+.cache
+
+# Railway
+.railway

@@ -1,6 +1,9 @@
 import { supabase, supabaseAdmin } from '../../config/supabase.config';
 import { OpenAIService } from '../openai/openai.service';
 import { LangFuseService } from '../langfuse/langfuse.service';
+import { jobQueueService } from './job-queue.service';
+import { cacheService } from '../cache/redis-cache.service';
+import { MemoryConfig } from '../../config/memory.config';
 import {
   ENRICHMENT_PROMPT,
   RELATION_DETECTION_PROMPT,
@@ -57,7 +60,86 @@ export class MemoryService {
   // 1. INGESTION - Store new memory blocks
   // =====================================================
 
+  /**
+   * ASYNC INGESTION (Non-Blocking)
+   * Returns immediately after inserting minimal block
+   * Enqueues enrichment for background processing
+   */
+  async ingestBlockAsync(block: MemoryBlock): Promise<any> {
+    // Check if memory system is enabled
+    if (!MemoryConfig.isSystemEnabled()) {
+      return null;
+    }
+
+    // Check if memory is enabled for this user
+    const memoryEnabled = await this.isMemoryEnabled(block.user_id, block.source_feature);
+    if (!memoryEnabled) {
+      return null;
+    }
+
+    try {
+      // Get default privacy level
+      const privacyLevel = block.privacy_level || await this.getDefaultPrivacyLevel(block.user_id);
+
+      // Insert MINIMAL block immediately (no AI processing)
+      const { data: minimalBlock, error } = await supabaseAdmin
+        .from('memory_blocks')
+        .insert({
+          user_id: block.user_id,
+          block_type: block.block_type,
+          source_feature: block.source_feature,
+          source_id: block.source_id,
+          content_text: block.content_text,
+          privacy_level: privacyLevel,
+          status: 'pending_enrichment', // New status field
+          exclude_from_memory: block.exclude_from_memory || false,
+        })
+        .select()
+        .single();
+
+      if (error) {
+        if (MemoryConfig.isFailFastEnabled()) {
+          throw error;
+        }
+        console.error('Memory ingestion error:', error);
+        return null;
+      }
+
+      // Log to memory ledger (non-blocking)
+      this.logOperation('create', block.user_id, minimalBlock.id, block.source_feature, {
+        block_type: block.block_type,
+        async: true,
+      }).catch((err) => console.error('Ledger log error:', err));
+
+      // Enqueue enrichment job for background processing
+      if (MemoryConfig.isEnrichmentEnabled() || MemoryConfig.isEmbeddingEnabled()) {
+        jobQueueService.enqueue('enrich_and_embed', block.user_id, {
+          block_id: minimalBlock.id,
+        }).catch((err) => console.error('Job enqueue error:', err));
+      }
+
+      // Invalidate user's context cache (async)
+      cacheService.invalidatePattern(`context:${block.user_id}:*`)
+        .catch((err) => console.error('Cache invalidation error:', err));
+
+      return minimalBlock; // Return immediately ✅
+    } catch (error) {
+      console.error('Memory ingestion error:', error);
+      if (MemoryConfig.isFailFastEnabled()) {
+        throw error;
+      }
+      return null; // Graceful fallback
+    }
+  }
+
+  /**
+   * LEGACY SYNCHRONOUS INGESTION (Deprecated)
+   * Use ingestBlockAsync() for new implementations
+   * Kept for backward compatibility
+   */
   async ingestBlock(block: MemoryBlock): Promise<any> {
+    console.warn('ingestBlock() is deprecated. Use ingestBlockAsync() instead.');
+
     // Check if memory is enabled for this user
     const memoryEnabled = await this.isMemoryEnabled(block.user_id, block.source_feature);
     if (!memoryEnabled) {
@@ -65,11 +147,13 @@ export class MemoryService {
     }
 
     // Create LangFuse trace (optional - won't break if it fails)
-    const trace = await this.langfuseService.createTrace(
-      'memory_ingest',
-      block.user_id,
-      { block_type: block.block_type, source_feature: block.source_feature }
-    ).catch(() => null);
+    const trace = MemoryConfig.isLangfuseEnabled()
+      ? await this.langfuseService.createTrace(
+          'memory_ingest',
+          block.user_id,
+          { block_type: block.block_type, source_feature: block.source_feature }
+        ).catch(() => null)
+      : null;
 
     try {
       // Enrich the block with metadata
@@ -101,6 +185,7 @@ export class MemoryService {
           exclude_from_memory: enrichedBlock.exclude_from_memory || false,
           relevance_score: enrichedBlock.relevance_score || 0.5,
           embedding: JSON.stringify(embedding), // pgvector format
+          status: 'active', // Already enriched
         })
         .select()
         .single();
@@ -143,7 +228,83 @@ export class MemoryService {
   // 2. ENRICHMENT - Add metadata to blocks
   // =====================================================
 
-  private async enrichBlock(block: MemoryBlock): Promise<MemoryBlock> {
+  /**
+   * Enrich and embed a block (for worker processing)
+   * This is called by the worker, not by the API
+   */
+  async enrichAndEmbedBlock(blockId: string): Promise<void> {
+    try {
+      // Get the block
+      const { data: block, error: blockError } = await supabaseAdmin
+        .from('memory_blocks')
+        .select('*')
+        .eq('id', blockId)
+        .single();
+
+      if (blockError || !block) {
+        throw new Error(`Block not found: ${blockId}`);
+      }
+
+      // Enrich if enabled
+      let enrichedData: any = {};
+      if (MemoryConfig.isEnrichmentEnabled()) {
+        try {
+          const enriched = await this.enrichBlock(block);
+          enrichedData = {
+            summary: enriched.summary,
+            sentiment: enriched.sentiment,
+            emotional_tone: enriched.emotional_tone,
+            themes: enriched.themes || [],
+            tags: enriched.tags || [],
+            crisis_flag: enriched.crisis_flag || false,
+            sensitivity_flag: enriched.sensitivity_flag || false,
+            relevance_score: enriched.relevance_score || 0.5,
+          };
+        } catch (error) {
+          console.error('Enrichment failed, continuing with embedding:', error);
+        }
+      }
+
+      // Generate embedding if enabled
+      let embedding: any = null;
+      if (MemoryConfig.isEmbeddingEnabled()) {
+        try {
+          embedding = await this.openaiService.generateEmbedding(block.content_text);
+        } catch (error) {
+          console.error('Embedding generation failed:', error);
+          throw error; // Embedding is critical for search
+        }
+      }
+
+      // Update block with enriched data and embedding
+      const { error: updateError } = await supabaseAdmin
+        .from('memory_blocks')
+        .update({
+          ...enrichedData,
+          embedding: embedding ? JSON.stringify(embedding) : null,
+          status: 'active', // Mark as enriched
+        })
+        .eq('id', blockId);
+
+      if (updateError) {
+        throw updateError;
+      }
+
+      console.log(`✅ Enriched and embedded block ${blockId}`);
+    } catch (error) {
+      console.error('Enrich and embed error:', error);
+
+      // Mark block as failed
+      await supabaseAdmin
+        .from('memory_blocks')
+        .update({ status: 'failed' })
+        .eq('id', blockId);
+
+      throw error;
+    }
+  }
+
+  private async enrichBlock(block: MemoryBlock | any): Promise<MemoryBlock> {
     try {
       const prompt = ENRICHMENT_PROMPT
         .replace('{content}', block.content_text)
@@ -182,24 +343,39 @@ export class MemoryService {
   // =====================================================
 
   async retrieveContext(userId: string, context: RetrievalContext): Promise<any> {
-    // Check if memory is enabled
-    const memoryEnabled = await this.isMemoryEnabled(userId, context.targetFeature);
-    if (!memoryEnabled) {
-      return {
-        context_bullets: [],
-        suggested_tone: 'supportive',
-        key_themes: [],
-      };
+    // Check if memory system is enabled
+    if (!MemoryConfig.isSystemEnabled()) {
+      return this.getEmptyContext();
     }
 
-    // Create LangFuse trace
-    const trace = this.langfuseService.createTrace(
-      'memory_retrieve',
-      userId,
-      { target_feature: context.targetFeature, query: context.query }
-    );
+    // Check if memory is enabled for this user
+    const memoryEnabled = await this.isMemoryEnabled(userId, context.targetFeature);
+    if (!memoryEnabled) {
+      return this.getEmptyContext();
+    }
+
+    // Generate cache key
+    const cacheKey = this.generateContextCacheKey(userId, context);
 
     try {
+      // Try to get from cache first
+      const cachedContext = await cacheService.get<any>(cacheKey);
+      if (cachedContext) {
+        console.log(`✅ Cache hit for context: ${cacheKey}`);
+        return cachedContext;
+      }
+
+      console.log(`⚠️ Cache miss for context: ${cacheKey}`);
+
+      // Create LangFuse trace (optional)
+      const trace = MemoryConfig.isLangfuseEnabled()
+        ? await this.langfuseService.createTrace(
+            'memory_retrieve',
+            userId,
+            { target_feature: context.targetFeature, query: context.query }
+          ).catch(() => null)
+        : null;
+
       // Generate embedding for query
       const queryEmbedding = await this.openaiService.generateEmbedding(
         context.query || context.currentTopic || 'general context'
@@ -209,53 +385,99 @@ export class MemoryService {
       const { data: similarBlocks, error } = await supabaseAdmin.rpc('search_memory_blocks', {
         p_user_id: userId,
         p_query_embedding: JSON.stringify(queryEmbedding),
-        p_limit: context.limit || 10,
-        p_similarity_threshold: context.similarityThreshold || 0.70,
+        p_limit: context.limit || MemoryConfig.getMaxContextBlocks(),
+        p_similarity_threshold: context.similarityThreshold || MemoryConfig.getSimilarityThreshold(),
         p_exclude_crisis: context.excludeCrisis !== false,
       });
 
-      if (error) throw error;
+      if (error) {
+        if (MemoryConfig.isFailFastEnabled()) {
+          throw error;
+        }
+        console.error('Retrieval error:', error);
+        return this.getEmptyContext();
+      }
 
-      // Log retrievals
-      for (const block of similarBlocks || []) {
-        await this.logOperation('retrieve', userId, block.block_id, context.targetFeature, {
-          similarity: block.similarity,
-          reason: 'semantic_search',
-        }, block.similarity);
-
-        // Update retrieval count
-        await supabaseAdmin
-          .from('memory_blocks')
-          .update({
-            retrieval_count: supabaseAdmin.sql`retrieval_count + 1`,
-            last_retrieved_at: new Date().toISOString(),
-          })
-          .eq('id', block.block_id);
+      // Log retrievals (non-blocking)
+      if (similarBlocks && similarBlocks.length > 0) {
+        this.logRetrievals(userId, similarBlocks, context.targetFeature)
+          .catch((err) => console.error('Retrieval logging error:', err));
       }
 
       // Synthesize context from retrieved blocks
-      const synthesizedContext = await this.synthesizeContext(
-        similarBlocks || [],
-        context
-      );
+      const synthesizedContext = MemoryConfig.isSynthesisEnabled()
+        ? await this.synthesizeContext(similarBlocks || [], context)
+        : this.getEmptyContext();
 
-      await trace.update({
-        output: {
-          blocks_retrieved: similarBlocks?.length || 0,
-          context: synthesizedContext,
-        },
-      });
+      // Cache the result
+      await cacheService.set(cacheKey, synthesizedContext, MemoryConfig.getCacheTTL());
+
+      // Update trace
+      if (trace && typeof trace.update === 'function') {
+        trace.update({
+          output: {
+            blocks_retrieved: similarBlocks?.length || 0,
+            context: synthesizedContext,
+          },
+        }).catch(() => {});
+      }
 
       return synthesizedContext;
     } catch (error) {
       console.error('Retrieval error:', error);
-      await trace.update({ output: { error: String(error) }, level: 'ERROR' });
-      return {
-        context_bullets: [],
-        suggested_tone: 'supportive',
-        key_themes: [],
-      };
+      if (MemoryConfig.isFailFastEnabled()) {
+        throw error;
+      }
+      return this.getEmptyContext(); // Graceful fallback
     }
+  }
+
+  /**
+   * Log multiple retrievals (non-blocking)
+   */
+  private async logRetrievals(
+    userId: string,
+    blocks: any[],
+    targetFeature: string
+  ): Promise<void> {
+    const logPromises = blocks.map((block) =>
+      this.logOperation('retrieve', userId, block.block_id, targetFeature, {
+        similarity: block.similarity,
+        reason: 'semantic_search',
+      }, block.similarity)
+    );
+
+    const updatePromises = blocks.map((block) =>
+      supabaseAdmin
+        .from('memory_blocks')
+        .update({
+          retrieval_count: supabaseAdmin.sql`retrieval_count + 1`,
+          last_retrieved_at: new Date().toISOString(),
+        })
+        .eq('id', block.block_id)
+    );
+
+    await Promise.all([...logPromises, ...updatePromises]);
+  }
+
+  /**
+   * Generate cache key for context retrieval
+   */
+  private generateContextCacheKey(userId: string, context: RetrievalContext): string {
+    const queryHash = context.query || context.currentTopic || 'general';
+    const normalizedQuery = queryHash.toLowerCase().replace(/[^a-z0-9]/g, '_').substring(0, 50);
+    return `context:${userId}:${context.targetFeature}:${normalizedQuery}`;
+  }
+
+  /**
+   * Get empty context (fallback)
+   */
+  private getEmptyContext(): any {
+    return {
+      context_bullets: [],
+      suggested_tone: 'supportive',
+      key_themes: [],
+    };
   }
 
   private async synthesizeContext(blocks: any[], context: RetrievalContext): Promise<any> {
@@ -302,20 +524,79 @@ export class MemoryService {
   // 4. RELATIONS - Auto-detect and manage connections
   // =====================================================
 
+  /**
+   * Auto-detect relations (async via job queue)
+   * EXPENSIVE: Only runs if enabled and user is under rate limit
+   */
   private async autoDetectRelations(newBlock: any): Promise<void> {
+    // Check if relation detection is enabled
+    if (!MemoryConfig.isRelationsEnabled()) {
+      return;
+    }
+
     try {
+      // Check rate limit
+      const { data: canDetect } = await supabaseAdmin.rpc('can_detect_relations', {
+        p_user_id: newBlock.user_id,
+        p_max_per_hour: MemoryConfig.getRelationRateLimit(),
+      });
+
+      if (!canDetect) {
+        console.log(`⚠️ Rate limit reached for relation detection: user ${newBlock.user_id}`);
+        return;
+      }
+
+      // Increment rate limit counter
+      await supabaseAdmin.rpc('increment_relation_detection', {
+        p_user_id: newBlock.user_id,
+      });
+
+      // Enqueue relation detection job (async)
+      await jobQueueService.enqueue('detect_relations', newBlock.user_id, {
+        block_id: newBlock.id,
+      }, 1); // Lower priority than enrichment
+
+      console.log(`✅ Enqueued relation detection for block ${newBlock.id}`);
+    } catch (error) {
+      console.error('Auto-detect relations error:', error);
+      // Don't throw - graceful fallback
+    }
+  }
+
+  /**
+   * Detect relations synchronously (for worker processing)
+   * This is called by the worker, not by the API
+   */
+  async detectRelationsForBlock(blockId: string): Promise<void> {
+    try {
+      // Get the block
+      const { data: newBlock, error: blockError } = await supabaseAdmin
+        .from('memory_blocks')
+        .select('*')
+        .eq('id', blockId)
+        .single();
+
+      if (blockError || !newBlock) {
+        throw new Error(`Block not found: ${blockId}`);
+      }
+
       // Get recent blocks from the same user (last 20)
       const { data: recentBlocks, error } = await supabaseAdmin
         .from('memory_blocks')
         .select('id, content_text, summary, block_type, source_feature')
         .eq('user_id', newBlock.user_id)
+        .eq('status', 'active') // Only consider enriched blocks
         .neq('id', newBlock.id)
         .order('created_at', { ascending: false })
         .limit(20);
 
-      if (error || !recentBlocks) return;
+      if (error || !recentBlocks || recentBlocks.length === 0) {
+        console.log(`No recent blocks found for relation detection: ${blockId}`);
+        return;
+      }
 
       // Check for relations with recent blocks
+      let relationsCreated = 0;
       for (const block of recentBlocks) {
         const relation = await this.detectRelation(newBlock, block);
         if (relation && relation.is_related) {
@@ -325,10 +606,14 @@ export class MemoryService {
             relation_type: relation.relation_type,
             strength: relation.strength,
           }, newBlock.user_id);
+          relationsCreated++;
         }
       }
+
+      console.log(`✅ Detected ${relationsCreated} relations for block ${blockId}`);
     } catch (error) {
-      console.error('Auto-detect relations error:', error);
+      console.error('Detect relations error:', error);
+      throw error;
     }
   }
 
@@ -381,31 +666,42 @@ export class MemoryService {
   // 5. INSIGHTS - Generate weekly summaries
   // =====================================================
 
+  /**
+   * Generate weekly summary (for worker processing)
+   * This is called by the worker or cron job
+   */
   async generateWeeklySummary(userId: string): Promise<any> {
-    const oneWeekAgo = new Date();
-    oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
-
-    // Get blocks from last week
-    const { data: weeklyBlocks } = await supabaseAdmin
-      .from('memory_blocks')
-      .select('*')
-      .eq('user_id', userId)
-      .gte('created_at', oneWeekAgo.toISOString())
-      .order('created_at', { ascending: false });
-
-    // Get mood data
-    const { data: moodData } = await supabaseAdmin
-      .from('mood_checkins')
-      .select('mood_value, notes, created_at')
-      .eq('user_id', userId)
-      .gte('created_at', oneWeekAgo.toISOString())
-      .order('created_at', { ascending: false });
-
-    if (!weeklyBlocks || weeklyBlocks.length === 0) {
+    // Check if weekly summaries are enabled
+    if (!MemoryConfig.isWeeklySummariesEnabled()) {
       return null;
     }
 
+    const oneWeekAgo = new Date();
+    oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
+
     try {
+      // Get blocks from last week (only active blocks)
+      const { data: weeklyBlocks } = await supabaseAdmin
+        .from('memory_blocks')
+        .select('*')
+        .eq('user_id', userId)
+        .eq('status', 'active')
+        .gte('created_at', oneWeekAgo.toISOString())
+        .order('created_at', { ascending: false });
+
+      // Get mood data
+      const { data: moodData } = await supabaseAdmin
+        .from('mood_checkins')
+        .select('mood_value, notes, created_at')
+        .eq('user_id', userId)
+        .gte('created_at', oneWeekAgo.toISOString())
+        .order('created_at', { ascending: false });
+
+      if (!weeklyBlocks || weeklyBlocks.length === 0) {
+        console.log(`No blocks found for weekly summary: user ${userId}`);
+        return null;
+      }
+
       const blocksText = weeklyBlocks
         .map((b) => `${b.block_type}: ${b.summary || b.content_text}`)
         .join('\n');
@@ -445,9 +741,27 @@ export class MemoryService {
 
       if (error) throw error;
 
+      console.log(`✅ Generated weekly summary for user ${userId}`);
       return insight;
     } catch (error) {
       console.error('Weekly summary generation error:', error);
+      if (MemoryConfig.isFailFastEnabled()) {
+        throw error;
+      }
+      return null;
+    }
+  }
+
+  /**
+   * Enqueue weekly summary job (call from cron)
+   */
+  async enqueueWeeklySummary(userId: string): Promise<string | null> {
+    try {
+      const jobId = await jobQueueService.enqueue('weekly_summary', userId, {}, 2); // Lowest priority
+      console.log(`✅ Enqueued weekly summary job for user ${userId}`);
+      return jobId;
+    } catch (error) {
+      console.error('Failed to enqueue weekly summary:', error);
       return null;
     }
   }

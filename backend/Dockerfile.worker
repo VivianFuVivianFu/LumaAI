@@ -1,0 +1,64 @@
+# ========================================
+# Multi-stage Dockerfile for Memory Worker
+# ========================================
+# Optimized for Railway deployment
+# Separate from API server for safe isolation
+
+# ========================================
+# Stage 1: Builder
+# ========================================
+FROM node:20-alpine AS builder
+
+WORKDIR /app
+
+# Copy package files
+COPY package*.json ./
+
+# Install all dependencies (including dev dependencies for build)
+RUN npm ci
+
+# Copy source code
+COPY . .
+
+# Build TypeScript
+RUN npm run build
+
+# Prune dev dependencies
+RUN npm prune --production
+
+# ========================================
+# Stage 2: Production
+# ========================================
+FROM node:20-alpine AS production
+
+WORKDIR /app
+
+# Copy production dependencies from builder
+COPY --from=builder /app/node_modules ./node_modules
+
+# Copy compiled code
+COPY --from=builder /app/dist ./dist
+
+# Copy package.json for reference
+COPY package*.json ./
+
+# Create non-root user for security
+RUN addgroup -g 1001 -S nodejs && \
+    adduser -S nodejs -u 1001
+
+# Change ownership
+RUN chown -R nodejs:nodejs /app
+
+# Switch to non-root user
+USER nodejs
+
+# Expose port (for health checks, optional)
+EXPOSE 4001
+
+# Health check (optional - worker doesn't need HTTP)
+# Railway will use this to monitor worker health
+HEALTHCHECK --interval=60s --timeout=10s --start-period=30s --retries=3 \
+  CMD node -e "console.log('Worker running'); process.exit(0)" || exit 1
+
+# Start memory worker
+CMD ["node", "dist/workers/memory-worker.js"]
