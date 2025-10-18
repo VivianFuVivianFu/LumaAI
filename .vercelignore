@@ -1,0 +1,21 @@
+# Exclude backend from Vercel deployment
+backend/
+
+# Exclude documentation and testing files
+*.md
+!README.md
+*.sh
+*.sql
+
+# Exclude development files
+.env.development
+.env.staging
+test-*.js
+*.test.ts
+*.test.tsx
+*.spec.ts
+*.spec.tsx
+
+# Exclude git files
+.git/
+.github/

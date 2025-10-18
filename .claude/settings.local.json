@@ -30,7 +30,13 @@
       "Bash(git remote set-url:*)",
       "Bash(git branch:*)",
       "Bash(git add:*)",
-      "Bash(git reset:*)"
+      "Bash(git reset:*)",
+      "Bash(git commit:*)",
+      "Bash(git push:*)",
+      "Bash(test:*)",
+      "Bash(tree:*)",
+      "Read(//c/Users/vivia/OneDrive/Desktop/**)",
+      "Bash(vercel login)"
     ],
     "deny": [],
     "ask": []
